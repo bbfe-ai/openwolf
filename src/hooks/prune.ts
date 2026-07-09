@@ -3,51 +3,47 @@ import * as path from "node:path";
 import { readJSON, writeJSON, readConfig } from "./shared.js";
 
 // ─── Memory consolidation ────────────────────────────────────────
-// Folds session tables in memory.md into one-line summaries. Runs from the
-// Stop hook every session end (no daemon required) and, for compatibility,
-// from the cron engine. Pure: takes an explicit wolfDir.
-
-const FAR_FUTURE = new Date(8640000000000000);
+// Archives whole sessions from memory.md to .wolf/archive/memory-YYYY-MM.md
+// (lossless — full detail preserved). Runs from the Stop hook every session end
+// (no daemon required) and, for compatibility, from the cron engine.
 
 function isTableRow(line: string): boolean {
   return line.startsWith("|") && !line.startsWith("|--") && !line.startsWith("| Time");
 }
 
-function fold(content: string, cutoff: Date): string {
-  const lines = content.split("\n");
-  const result: string[] = [];
-  let inOldSession = false;
-  let oldSessionLines: string[] = [];
+interface SessionBlock {
+  date: Date | null;
+  lines: string[];
+  rows: number;
+}
 
-  const flush = () => {
-    if (inOldSession && oldSessionLines.length > 0) {
-      const actionCount = oldSessionLines.filter(isTableRow).length;
-      result.push(`> Consolidated session (${actionCount} actions)`);
-      result.push("");
-    }
-  };
-
-  for (const line of lines) {
-    const sessionMatch = line.match(/^## Session: (\d{4}-\d{2}-\d{2})/);
-    if (sessionMatch) {
-      flush();
-      const currentSessionDate = new Date(sessionMatch[1]);
-      inOldSession = currentSessionDate < cutoff;
-      oldSessionLines = [];
-      result.push(line); // Always keep the header
+function parseSessions(content: string): { preamble: string[]; blocks: SessionBlock[] } {
+  const preamble: string[] = [];
+  const blocks: SessionBlock[] = [];
+  let cur: SessionBlock | null = null;
+  for (const line of content.split("\n")) {
+    const m = line.match(/^## Session: (\d{4}-\d{2}-\d{2})/);
+    if (m) {
+      cur = { date: new Date(m[1]), lines: [line], rows: 0 };
+      blocks.push(cur);
       continue;
     }
-    if (inOldSession) oldSessionLines.push(line);
-    else result.push(line);
+    if (cur) {
+      cur.lines.push(line);
+      if (isTableRow(line)) cur.rows++;
+    } else {
+      preamble.push(line);
+    }
   }
-  flush();
-  return result.join("\n");
+  return { preamble, blocks };
 }
 
 /**
- * Consolidate memory.md sessions older than `olderThanDays`. If `maxEntries`
- * is given and the active (non-consolidated) table rows still exceed it after
- * the age pass, fold every session as a count-based safety net.
+ * Move memory.md sessions older than `olderThanDays` out to
+ * .wolf/archive/memory-YYYY-MM.md with FULL detail preserved (lossless — no
+ * folding, nothing dropped). If `maxEntries` is given and the kept sessions'
+ * table rows still exceed it, archive the oldest kept sessions too (always
+ * keeping the newest session).
  */
 export function consolidateMemory(wolfDir: string, olderThanDays: number, maxEntries?: number): void {
   const memoryPath = path.join(wolfDir, "memory.md");
@@ -62,22 +58,50 @@ export function consolidateMemory(wolfDir: string, olderThanDays: number, maxEnt
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - olderThanDays);
 
-  let out = fold(content, cutoff);
+  const { preamble, blocks } = parseSessions(content);
+  if (blocks.length === 0) return;
 
-  if (maxEntries && maxEntries > 0) {
-    const activeRows = out.split("\n").filter(isTableRow).length;
-    if (activeRows > maxEntries) out = fold(content, FAR_FUTURE);
+  const archive: SessionBlock[] = [];
+  const keep: SessionBlock[] = [];
+  for (const b of blocks) {
+    if (b.date && b.date < cutoff) archive.push(b);
+    else keep.push(b);
   }
 
-  if (out !== content) {
-    const tmp = memoryPath + ".prune.tmp";
-    try {
-      fs.writeFileSync(tmp, out, "utf-8");
-      fs.renameSync(tmp, memoryPath);
-    } catch {
-      try { fs.writeFileSync(memoryPath, out, "utf-8"); } catch {}
-      try { fs.unlinkSync(tmp); } catch {}
+  // Count-based safety net: archive oldest kept sessions until under the cap.
+  if (maxEntries && maxEntries > 0) {
+    const totalRows = () => keep.reduce((s, b) => s + b.rows, 0);
+    while (keep.length > 1 && totalRows() > maxEntries) {
+      archive.push(keep.shift()!);
     }
+  }
+
+  if (archive.length === 0) return;
+
+  // Append archived sessions verbatim to the monthly archive — lossless.
+  const archiveDir = path.join(wolfDir, "archive");
+  const month = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const archivePath = path.join(archiveDir, `memory-${month}.md`);
+  try {
+    if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+    const chunk = archive.map((b) => b.lines.join("\n").replace(/\s+$/, "")).join("\n\n");
+    const head = fs.existsSync(archivePath)
+      ? "\n\n"
+      : `# Memory Archive (${month})\n\n> Full sessions moved out of memory.md by prune. Nothing is lost.\n\n`;
+    fs.appendFileSync(archivePath, head + chunk + "\n", "utf-8");
+  } catch {
+    return; // Never drop detail if archiving failed.
+  }
+
+  // Rebuild memory.md = preamble + kept sessions.
+  const out = [...preamble, ...keep.flatMap((b) => b.lines)].join("\n");
+  const tmp = memoryPath + ".prune.tmp";
+  try {
+    fs.writeFileSync(tmp, out, "utf-8");
+    fs.renameSync(tmp, memoryPath);
+  } catch {
+    try { fs.writeFileSync(memoryPath, out, "utf-8"); } catch {}
+    try { fs.unlinkSync(tmp); } catch {}
   }
 }
 
