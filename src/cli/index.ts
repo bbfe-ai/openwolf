@@ -165,5 +165,16 @@ export function createProgram(): Command {
       bugSearch(term);
     });
 
+  // --- Retrieval search across .wolf memory/cerebrum/buglog ---
+  program
+    .command("search <term>")
+    .description("Search .wolf memory/cerebrum/buglog for locating lines (no whole-file read)")
+    .option("--file <file>", "Limit to one of: memory, cerebrum, buglog")
+    .option("--top <n>", "Max results (default 10)")
+    .action(async (term: string, opts: { file?: string; top?: string }) => {
+      const { searchCommand } = await import("./search-cmd.js");
+      searchCommand(term, opts);
+    });
+
   return program;
 }

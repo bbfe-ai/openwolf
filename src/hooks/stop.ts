@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getWolfDir, ensureWolfDir, readJSON, writeJSON, appendMarkdown, timeShort, readConfig } from "./shared.js";
 import { runPrune } from "./prune.js";
+import { buildIndex } from "./retrieval.js";
 
 interface FileRead {
   count: number;
@@ -75,6 +76,9 @@ async function main(): Promise<void> {
   // Runs here (Stop hook), before any early return, so it always executes at
   // session end and never depends on the pm2 daemon being started.
   try { runPrune(wolfDir); } catch {}
+
+  // Rebuild the retrieval index (after prune, so it reflects the pruned state).
+  try { buildIndex(wolfDir); } catch {}
 
   // Only write to ledger if there's been activity
   const readCount = Object.keys(session.files_read).length;
