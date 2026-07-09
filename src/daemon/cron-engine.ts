@@ -2,7 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
 import cron from "node-cron";
-import { readJSON, writeJSON, readText, writeText, appendText } from "../utils/fs-safe.js";
+import { readJSON, writeJSON, writeText, appendText } from "../utils/fs-safe.js";
+import { consolidateMemory } from "../hooks/prune.js";
 import { scanProject } from "../scanner/anatomy-scanner.js";
 import { detectWaste } from "../tracker/waste-detector.js";
 import type { Logger } from "../utils/logger.js";
@@ -214,7 +215,7 @@ export class CronEngine {
         break;
 
       case "consolidate_memory":
-        this.consolidateMemory(action.params?.older_than_days as number ?? 7);
+        consolidateMemory(this.wolfDir, action.params?.older_than_days as number ?? 7);
         break;
 
       case "generate_token_report":
@@ -228,59 +229,6 @@ export class CronEngine {
       default:
         throw new Error(`Unknown action type: ${action.type}`);
     }
-  }
-
-  private consolidateMemory(olderThanDays: number): void {
-    const memoryPath = path.join(this.wolfDir, "memory.md");
-    const content = readText(memoryPath);
-    if (!content) return;
-
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - olderThanDays);
-
-    const lines = content.split("\n");
-    const result: string[] = [];
-    let inOldSession = false;
-    let oldSessionLines: string[] = [];
-    let currentSessionDate: Date | null = null;
-
-    for (const line of lines) {
-      const sessionMatch = line.match(/^## Session: (\d{4}-\d{2}-\d{2})/);
-      if (sessionMatch) {
-        // Flush previous old session
-        if (inOldSession && oldSessionLines.length > 0) {
-          const actionCount = oldSessionLines.filter((l) => l.startsWith("|") && !l.startsWith("|--") && !l.startsWith("| Time")).length;
-          result.push(`> Consolidated session (${actionCount} actions)`);
-          result.push("");
-        }
-
-        currentSessionDate = new Date(sessionMatch[1]);
-        if (currentSessionDate < cutoff) {
-          inOldSession = true;
-          oldSessionLines = [];
-          result.push(line); // Keep the header
-        } else {
-          inOldSession = false;
-          result.push(line);
-        }
-        continue;
-      }
-
-      if (inOldSession) {
-        oldSessionLines.push(line);
-      } else {
-        result.push(line);
-      }
-    }
-
-    // Flush last old session
-    if (inOldSession && oldSessionLines.length > 0) {
-      const actionCount = oldSessionLines.filter((l) => l.startsWith("|") && !l.startsWith("|--") && !l.startsWith("| Time")).length;
-      result.push(`> Consolidated session (${actionCount} actions)`);
-      result.push("");
-    }
-
-    writeText(memoryPath, result.join("\n"));
   }
 
   private generateTokenReport(): void {

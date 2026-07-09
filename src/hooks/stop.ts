@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getWolfDir, ensureWolfDir, readJSON, writeJSON, appendMarkdown, timeShort, readConfig } from "./shared.js";
+import { runPrune } from "./prune.js";
 
 interface FileRead {
   count: number;
@@ -69,6 +70,11 @@ async function main(): Promise<void> {
   });
 
   session.stop_count++;
+
+  // Write-path governance: consolidate old memory sessions + cap buglog.
+  // Runs here (Stop hook), before any early return, so it always executes at
+  // session end and never depends on the pm2 daemon being started.
+  try { runPrune(wolfDir); } catch {}
 
   // Only write to ledger if there's been activity
   const readCount = Object.keys(session.files_read).length;
