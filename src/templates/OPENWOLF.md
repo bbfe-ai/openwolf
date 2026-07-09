@@ -8,10 +8,18 @@ You are working in an OpenWolf-managed project. These rules apply every turn.
 2. If the description in anatomy.md is sufficient for your task, do NOT read the full file.
 3. If a file is not in anatomy.md, search with Grep/Glob, then update anatomy.md with the new entry.
 
+## Knowledge Retrieval (search before reading)
+
+`.wolf/cerebrum.md`, `.wolf/memory.md`, and `.wolf/buglog.json` can grow large. Do NOT read them whole. Instead:
+
+1. Run `openwolf search <term>` (optionally `--file cerebrum|memory|buglog`, `--top N`) to get `file:locator` hits with snippets.
+2. Open only the returned locators — never load the entire file into context.
+3. `.wolf/anatomy.md` is the exception: it is the compact project map, meant to be read/injected in full. It is not part of `openwolf search`.
+
 ## Code Generation
 
-1. Before generating code, read `.wolf/cerebrum.md` and respect every entry.
-2. Check the `## Do-Not-Repeat` section — these are past mistakes that must not recur.
+1. Before generating code, run `openwolf search <topic>` against cerebrum to surface relevant conventions and past mistakes, then read only those entries.
+2. Always check the `## Do-Not-Repeat` section — these are past mistakes that must not recur.
 3. Follow all conventions in `## Key Learnings` and `## User Preferences`.
 
 ## After Actions
@@ -64,7 +72,7 @@ OpenWolf's value comes from learning across sessions. You MUST update `.wolf/cer
 - You change error handling, try/catch blocks, or validation logic
 - The user says something "doesn't work", "is broken", or "shows wrong X"
 
-**Before fixing:** Read `.wolf/buglog.json` first — the fix may already be known.
+**Before fixing:** run `openwolf search <error>` (or `openwolf bug search <term>`) to find known fixes — do NOT read the whole `.wolf/buglog.json`.
 
 **After fixing:** ALWAYS append to `.wolf/buglog.json` with this structure:
 ```json
@@ -88,6 +96,7 @@ OpenWolf's value comes from learning across sessions. You MUST update `.wolf/cer
 
 - Never re-read a file already read this session unless it was modified since.
 - Prefer anatomy.md descriptions over full file reads when possible.
+- Use `openwolf search` to locate entries in cerebrum/memory/buglog instead of reading them whole.
 - Prefer targeted Grep over full file reads when searching for specific code.
 - If appending to a file, do not read the entire file first.
 
