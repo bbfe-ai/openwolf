@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getWolfDir, ensureWolfDir, writeJSON, appendMarkdown, readJSON, timestamp, timeShort } from "./shared.js";
+import { getWolfDir, ensureWolfDir, writeJSON, appendMarkdown, readJSON, timestamp, timeShort, readConfig } from "./shared.js";
 
 async function main(): Promise<void> {
   ensureWolfDir();
@@ -34,10 +34,12 @@ async function main(): Promise<void> {
     stop_count: 0,
   });
 
-  // Append session header to memory.md
-  const memoryPath = path.join(wolfDir, "memory.md");
-  const header = `\n## Session: ${now.toISOString().slice(0, 10)} ${timeShort()}\n\n| Time | Action | File(s) | Outcome | ~Tokens |\n|------|--------|---------|---------|--------|\n`;
-  appendMarkdown(memoryPath, header);
+  // Append session header to memory.md (opt-in — off by default to keep memory.md small)
+  if (readConfig().memory?.log_edits) {
+    const memoryPath = path.join(wolfDir, "memory.md");
+    const header = `\n## Session: ${now.toISOString().slice(0, 10)} ${timeShort()}\n\n| Time | Action | File(s) | Outcome | ~Tokens |\n|------|--------|---------|---------|--------|\n`;
+    appendMarkdown(memoryPath, header);
+  }
 
   // Check cerebrum freshness — remind Claude to learn
   try {

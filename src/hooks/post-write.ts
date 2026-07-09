@@ -3,7 +3,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import {
   getWolfDir, ensureWolfDir, readJSON, writeJSON, readMarkdown, parseAnatomy, serializeAnatomy,
-  extractDescription, estimateTokens, appendMarkdown, timeShort, readStdin, normalizePath
+  extractDescription, estimateTokens, appendMarkdown, timeShort, readStdin, normalizePath, readConfig
 } from "./shared.js";
 
 interface SessionData {
@@ -122,8 +122,9 @@ async function main(): Promise<void> {
     }
   } catch {}
 
-  // 2. Append richer entry to memory.md
+  // 2. Append richer entry to memory.md (opt-in — off by default to prevent unbounded growth)
   try {
+    if (readConfig().memory?.log_edits) {
     const action = toolName === "Write" ? "Created" : toolName === "MultiEdit" ? "Multi-edited" : "Edited";
     const relFile = normalizePath(path.relative(projectRoot, absolutePath));
     const fileContent = input.tool_input?.content ?? "";
@@ -140,6 +141,7 @@ async function main(): Promise<void> {
     const memoryPath = path.join(wolfDir, "memory.md");
     const outcome = changeDesc || "—";
     appendMarkdown(memoryPath, `| ${timeShort()} | ${action} ${relFile} | ${outcome} | ~${writeTokens} |\n`);
+    }
   } catch {}
 
   // 3. Record in session tracker + track edit counts
@@ -171,9 +173,10 @@ async function main(): Promise<void> {
     }
   } catch {}
 
-  // 4. Auto-detect bug-fix patterns and log them
+  // 4. Auto-detect bug-fix patterns and log them (opt-in — off by default; noisy
+  //    heuristic buried real bugs. Explicit logBug is the supported path.)
   try {
-    if (oldStr && newStr) {
+    if (oldStr && newStr && readConfig().buglog?.auto_detect) {
       autoDetectBugFix(wolfDir, absolutePath, projectRoot, oldStr, newStr);
     }
   } catch {}

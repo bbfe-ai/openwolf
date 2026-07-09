@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getWolfDir, ensureWolfDir, readJSON, writeJSON, appendMarkdown, timeShort } from "./shared.js";
+import { getWolfDir, ensureWolfDir, readJSON, writeJSON, appendMarkdown, timeShort, readConfig } from "./shared.js";
 
 interface FileRead {
   count: number;
@@ -163,7 +163,8 @@ async function main(): Promise<void> {
   writeJSON(ledgerPath, ledger);
 
   // Write a session summary line to memory.md if there was meaningful activity
-  if (writeCount > 0) {
+  // (opt-in — off by default to keep memory.md small)
+  if (writeCount > 0 && readConfig().memory?.log_edits) {
     try {
       const uniqueFiles = new Set(session.files_written.map(w => path.basename(w.file)));
       const fileList = [...uniqueFiles].slice(0, 5).join(", ");

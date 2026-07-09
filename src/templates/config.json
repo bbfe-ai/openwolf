@@ -46,7 +46,12 @@
     },
     "memory": {
       "consolidation_after_days": 7,
-      "max_entries_before_consolidation": 200
+      "max_entries_before_consolidation": 200,
+      "log_edits": false
+    },
+    "buglog": {
+      "auto_detect": false,
+      "max_entries": 200
     },
     "cerebrum": {
       "max_tokens": 2000,

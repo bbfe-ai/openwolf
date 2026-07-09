@@ -56,6 +56,18 @@ export function appendMarkdown(filePath: string, line: string): void {
   fs.appendFileSync(filePath, line, "utf-8");
 }
 
+// ─── Config access ───────────────────────────────────────────────
+// Reads .wolf/config.json and returns the `openwolf` object. Hooks are
+// short-lived processes, so a module-level cache is safe.
+let _configCache: Record<string, any> | null = null;
+export function readConfig(): Record<string, any> {
+  if (_configCache) return _configCache;
+  const cfgPath = path.join(getWolfDir(), "config.json");
+  const cfg = readJSON<{ openwolf?: Record<string, any> }>(cfgPath, {});
+  _configCache = cfg.openwolf ?? {};
+  return _configCache;
+}
+
 export interface AnatomyEntry {
   file: string;
   description: string;
