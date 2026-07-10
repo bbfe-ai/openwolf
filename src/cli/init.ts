@@ -440,6 +440,7 @@ function copyHookScripts(wolfDir: string): void {
     // so the adapter subdirectory must be deployed alongside the top-level hooks.
     // Entries with a path separator are copied into the matching subdirectory.
     "adapters/normalize.js",
+    "adapters/codex-v4a.js",
   ];
 
   let copiedAny = false;
