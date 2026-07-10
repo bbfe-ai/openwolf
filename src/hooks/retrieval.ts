@@ -199,11 +199,19 @@ export function search(wolfDir: string, query: string, opts: SearchOpts = {}): S
     postings: {},
   });
   const qtokens = tokenize(query);
+  const N = idx.records.length;
   const scores = new Map<number, number>();
   for (const tok of qtokens) {
     const ids = idx.postings[tok];
-    if (!ids) continue;
-    for (const id of ids) scores.set(id, (scores.get(id) ?? 0) + 1);
+    if (!ids || ids.length === 0) continue;
+    // BM25-IDF weight: rare terms count more than common filler (OPT-14). The
+    // index is binary-presence (postings store record IDs, no per-record term
+    // frequency), so this is the IDF component of BM25 with binary TF — full
+    // BM25 saturation (k1) + doc-length normalization (b) would need TF +
+    // length storage, deferred. Laplace-smoothed: a term in every record
+    // (df=N) scores 0 (carries no discriminative info), value always >= 0.
+    const idf = Math.log((N + 1) / (ids.length + 1));
+    for (const id of ids) scores.set(id, (scores.get(id) ?? 0) + idf);
   }
   let hits: SearchHit[] = [];
   for (const [id, score] of scores) {

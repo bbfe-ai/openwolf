@@ -65,9 +65,12 @@ const has = (arr, t) => arr.includes(t);
   assert(!("the" in idx.postings), `stopword "the" NOT in postings (OPT-15 at index time)`);
   assert("bug" in idx.postings, `"bug" in postings`);
 
-  // search sanity: "bug" matches; "the bug" == "bug" (query stopwords filtered)
+  // search sanity: "bug" matches; "the bug" == "bug" (query stopwords filtered).
+  // Note: "bug" appears in all 3 records here so its idf=0 under OPT-14
+  // (BM25-IDF — a universal term carries no discriminative info); hits still
+  // returned, just score 0. Assert presence, not score magnitude.
   const hits = search(wolfDir, "bug");
-  assert(hits.length > 0 && hits[0].score > 0, `search("bug") returns scored hits`);
+  assert(hits.length > 0, `search("bug") returns hits post-build`);
   const hitsWithStop = search(wolfDir, "the bug");
   assert(hitsWithStop.length === hits.length, `search("the bug") == search("bug") (query stopword filtered, OPT-15)`);
 
