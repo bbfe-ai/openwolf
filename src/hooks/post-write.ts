@@ -36,6 +36,13 @@ interface BugLog {
 // was duplicated as two identical Sets in updateAnatomyEntry + summarizeEdit).
 const CODE_EXTS = new Set([".ts", ".js", ".tsx", ".jsx", ".py", ".json", ".yaml", ".yml", ".css"]);
 
+// Surface post-write step failures to stderr instead of swallowing silently, so
+// I/O / JSON errors don't become invisible (OPT-36). Each step is best-effort
+// (post-write never blocks the edit) — this only adds a stderr notice.
+function warnPostWriteFailure(step: string, e: unknown): void {
+  process.stderr.write(`openwolf post-write: ${step} failed: ${e instanceof Error ? e.message : String(e)}\n`);
+}
+
 async function main(): Promise<void> {
   ensureWolfDir();
   const wolfDir = getWolfDir();
@@ -127,10 +134,10 @@ function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: stri
       fs.writeFileSync(tmp, serialized, "utf-8");
       fs.renameSync(tmp, anatomyPath);
     } catch {
-      try { fs.writeFileSync(anatomyPath, serialized, "utf-8"); } catch {}
+      try { fs.writeFileSync(anatomyPath, serialized, "utf-8"); } catch (e) { warnPostWriteFailure("anatomy fallback write", e); }
       try { fs.unlinkSync(tmp); } catch {}
     }
-  } catch {}
+  } catch (e) { warnPostWriteFailure("anatomy update", e); }
 
   // 2. Append richer entry to memory.md (opt-in — off by default to prevent unbounded growth)
   try {
@@ -151,7 +158,7 @@ function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: stri
     const outcome = changeDesc || "—";
     appendMarkdown(memoryPath, `| ${timeShort()} | ${action} ${relFile} | ${outcome} | ~${writeTokens} |\n`);
     }
-  } catch {}
+  } catch (e) { warnPostWriteFailure("memory append", e); }
 
   // 3. Record in session tracker + track edit counts
   try {
@@ -180,7 +187,7 @@ function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: stri
         `⚠️ OpenWolf: ${baseName} has been edited ${session.edit_counts[editKey]} times this session. If you're fixing a bug, remember to log it to .wolf/buglog.json.\n`
       );
     }
-  } catch {}
+  } catch (e) { warnPostWriteFailure("session tracker", e); }
 
   // 4. Auto-detect bug-fix patterns and log them (opt-in — off by default; noisy
   //    heuristic buried real bugs. Explicit logBug is the supported path.)
@@ -188,7 +195,7 @@ function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: stri
     if (oldStr && newStr && readConfig().buglog?.auto_detect) {
       autoDetectBugFix(wolfDir, absolutePath, projectRoot, oldStr, newStr);
     }
-  } catch {}
+  } catch (e) { warnPostWriteFailure("auto-detect bug fix", e); }
 }
 
 // ─── Edit Summarizer ─────────────────────────────────────────────
