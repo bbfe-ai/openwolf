@@ -182,6 +182,7 @@
 - 门禁:G0-build
 
 ### T3.2 camelCase→snake_case 字段映射
+- **前提(D8,OPEN·待新会话定案)**:映射位置待定——Design B(推荐,放 normalize.ts opencode 分支,shim 只 transport)vs Design A(放 shim,需补 normalize opencode→passthrough 防假绿)。详见 01_authoritative.md §5 D8。**定案前勿开工 T3.1**(否则 false-green:T2.5 接线后 hook 对 opencode 输入会 no-op,e2e 假绿)。
 - 上游:T3.1
 - 下游:T3.5
 - 处理点:shim 内映射 edit{filePath,oldString,newString}→{file_path,old_string,new_string};write{filePath,content}→{file_path,content};read{filePath}→{file_path};tool 字符串映射 edit/write/read→Edit/Write/Read(对齐 Claude tool_name)
