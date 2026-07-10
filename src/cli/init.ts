@@ -9,6 +9,7 @@ import { ensureDir } from "../utils/paths.js";
 import { isWindows } from "../utils/platform.js";
 import { registerProject } from "./registry.js";
 import { HOOK_FILES } from "./hook-files.js";
+import { ensureClaudeMdSnippet } from "./claude-md.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -312,13 +313,14 @@ export async function initCommand(options: InitOptions = {}): Promise<void> {
     const rulesContent = readTemplateContent("claude-rules-openwolf.md", actualTemplatesDir);
     writeText(path.join(rulesDir, "openwolf.md"), rulesContent);
 
-    // --- CLAUDE.md: add snippet if missing ---
+    // --- CLAUDE.md: ensure v2 snippet (OPT-43: refresh stale pre-v2 snippets) ---
     const claudeMdPath = path.join(projectRoot, "CLAUDE.md");
     const snippetContent = readTemplateContent("claude-md-snippet.md", actualTemplatesDir);
     if (fs.existsSync(claudeMdPath)) {
       const existing = readText(claudeMdPath);
-      if (!existing.includes("OpenWolf")) {
-        writeText(claudeMdPath, snippetContent + "\n\n" + existing);
+      const updated = ensureClaudeMdSnippet(existing, snippetContent);
+      if (updated !== null) {
+        writeText(claudeMdPath, updated);
       }
     } else {
       writeText(claudeMdPath, snippetContent);

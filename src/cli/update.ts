@@ -14,6 +14,7 @@ import { getRegisteredProjects, registerProject, type RegisteredProject } from "
 import { readJSON, writeJSON, readText, writeText } from "../utils/fs-safe.js";
 import { ensureDir } from "../utils/paths.js";
 import { HOOK_FILES } from "./hook-files.js";
+import { ensureClaudeMdSnippet } from "./claude-md.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -200,13 +201,14 @@ async function updateProject(
     writeText(path.join(rulesDir, "openwolf.md"), rulesContent);
     console.log(`    ✓ Claude rules updated`);
 
-    // 6. Update CLAUDE.md snippet if it references OpenWolf
+    // 6. Update CLAUDE.md snippet — ensure v2 (OPT-43: refresh stale pre-v2 snippets)
     const claudeMdPath = path.join(root, "CLAUDE.md");
     const snippetContent = readTemplateContent("claude-md-snippet.md", templatesDir);
     if (fs.existsSync(claudeMdPath)) {
       const existing = readText(claudeMdPath);
-      if (!existing.includes("OpenWolf")) {
-        writeText(claudeMdPath, snippetContent + "\n\n" + existing);
+      const updated = ensureClaudeMdSnippet(existing, snippetContent);
+      if (updated !== null) {
+        writeText(claudeMdPath, updated);
         console.log(`    ✓ CLAUDE.md updated`);
       }
     }
