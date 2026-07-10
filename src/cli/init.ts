@@ -8,6 +8,7 @@ import { readJSON, writeJSON, readText, writeText } from "../utils/fs-safe.js";
 import { ensureDir } from "../utils/paths.js";
 import { isWindows } from "../utils/platform.js";
 import { registerProject } from "./registry.js";
+import { HOOK_FILES } from "./hook-files.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -545,22 +546,7 @@ function copyHookScripts(wolfDir: string): void {
     }
   }
 
-  const hookFiles = [
-    "session-start.js",
-    "pre-read.js",
-    "pre-write.js",
-    "post-read.js",
-    "post-write.js",
-    "stop.js",
-    "shared.js",
-    "prune.js",
-    "retrieval.js",
-    // Agent adapter seam (initiative 11): shared.js imports ./adapters/normalize.js,
-    // so the adapter subdirectory must be deployed alongside the top-level hooks.
-    // Entries with a path separator are copied into the matching subdirectory.
-    "adapters/normalize.js",
-    "adapters/codex-v4a.js",
-  ];
+  const hookFiles = HOOK_FILES;
 
   let copiedAny = false;
   if (sourceDir) {

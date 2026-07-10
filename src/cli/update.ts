@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { getRegisteredProjects, registerProject, type RegisteredProject } from "./registry.js";
 import { readJSON, writeJSON, readText, writeText } from "../utils/fs-safe.js";
 import { ensureDir } from "../utils/paths.js";
+import { HOOK_FILES } from "./hook-files.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -315,7 +316,7 @@ function readTemplateContent(filename: string, templatesDir: string): string {
   return templates[filename] ?? "";
 }
 
-function copyHookScripts(wolfDir: string): void {
+export function copyHookScripts(wolfDir: string): void {
   const hooksDir = path.join(wolfDir, "hooks");
   ensureDir(hooksDir);
 
@@ -333,16 +334,15 @@ function copyHookScripts(wolfDir: string): void {
     }
   }
 
-  const hookFiles = [
-    "session-start.js", "pre-read.js", "pre-write.js",
-    "post-read.js", "post-write.js", "stop.js", "shared.js",
-  ];
+  const hookFiles = HOOK_FILES;
 
   if (sourceDir) {
     for (const file of hookFiles) {
       const src = path.join(sourceDir, file);
       if (fs.existsSync(src)) {
-        fs.copyFileSync(src, path.join(hooksDir, file));
+        const dest = path.join(hooksDir, file);
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.copyFileSync(src, dest);
       }
     }
   }
