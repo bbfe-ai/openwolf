@@ -1,0 +1,18 @@
+{
+  "generated_for": "claude",
+  "workload": {
+    "session_starts": 1,
+    "edits": 20,
+    "stops": 1
+  },
+  "anatomy_bytes": 234,
+  "cerebrum_bytes": 142,
+  "memory_bytes": 233,
+  "memory_blocks": 1,
+  "memory_rows": 1,
+  "buglog_bytes": 23,
+  "buglog_count": 0,
+  "archive_exists": true,
+  "index_exists": true,
+  "search_returns_cerebrum": true
+}
