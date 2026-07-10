@@ -38,7 +38,7 @@
 | P2 codex | T2.1 V4A patch 解析器 `adapters/codex-v4a.ts` | ☑ | commit ac47a2f;7/7 byte-parity |
 | P2 codex | T2.2 Codex envelope 归一化(apply_patch→Claude 形状) | ☑ | commit 7db1f04;10/10;envelope snake_case 亲验 |
 | P2 codex | T2.3 `openwolf init --agent codex` 写 .codex/hooks.json | ☑ | commit b6a7f0b;codex-init-test 43/43 + G-regress-claude 8/8 |
-| P2 codex | T2.4 项目根 cwd 适配(替代 $CLAUDE_PROJECT_DIR) | ☐ | envelope.cwd |
+| P2 codex | T2.4 项目根 cwd 适配(替代 $CLAUDE_PROJECT_DIR) | ⊘ | 无需改码:codex-cwd-test 6/6 实跑 process.cwd() 已正确(codex 设 cwd=项目根 Q1);envelope.cwd==process.cwd() 冗余(Q4);stale-leak 边角 DEFERRED;commit 3a777c3 |
 | P2 codex | T2.5 G-codex-e2e 实跑验证 | ☐ | |
 | P3 opencode | T3.1 TS plugin shim `adapters/opencode-plugin.ts` | ☐ | D2 shim 非 SSE |
 | P3 opencode | T3.2 camelCase→snake_case 字段映射 | ☐ | edit.ts:47-56 |
@@ -58,7 +58,7 @@
 | stop prune 无 daemon | ✅ ☑ | — | — |
 | search 定位非整读 | ✅ ☑ | — | — |
 
-**下一个可执行任务:T2.4**(项目根 cwd 适配:`shared.ts` getWolfDir 加 codex 分支,无 `$CLAUDE_PROJECT_DIR` 时用 envelope.cwd)。
+**下一个可执行任务:T2.5**(G-codex-e2e:构造 codex apply_patch envelope 喂 hook.js stdin,跑 20 edit + SessionStart + Stop,断言不爆炸 + V4A file_path 一致)。
 
 ## 3. Phase 总览(不带状态列,状态以 §2 为准)
 

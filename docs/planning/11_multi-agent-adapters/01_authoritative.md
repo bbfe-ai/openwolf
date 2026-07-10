@@ -91,6 +91,7 @@ agent event ────┤                                                     
 | D4 | 2026-07-10 | `openwolf init --agent <claude|codex|opencode>` 单选,不默认全装 | 三 agent 注册点互斥(写不同配置文件),全装会让 agent 重复触发;用户显式选目标 agent。`openwolf init` 不带 flag 默认 claude(零回归) | 默认全装 |
 | D5 | 2026-07-10 | V4A 解析器自己写,不引外部 patch 库 | 零原生依赖原则;V4A grammar 简纯文本(`apply_patch.lark`:`*** Begin Patch`/`*** Update File:`/`@@`/` -`/`+`/`*** End Patch`),纯 JS 解析足够;引库增依赖面 | 引 unified-diff 库 |
 | D6 | 2026-07-10 | 两个 agent(codex+opencode)都做完,留在 feat/context-optimization 分支不合并不发版 | 用户拍板(2026-07-10):要完整多 agent 支持;合并发版待 review。与主线10 现状一致(6 commit 未合 main) | 先做 codex 再 opencode / 只做 codex / 合并发版 |
+| D7 | 2026-07-10 | T2.4 getWolfDir 不加 codex 分支,落现有 `CLAUDE_PROJECT_DIR || process.cwd()` 回退;stale-leak 边角 DEFERRED | **实跑证伪**(codex-cwd-test 6/6,commit 3a777c3,非源码论断):codex spawn hook 进程 cwd=项目根(command_runner.rs:49-65 `.current_dir(cwd)`,config/mod.rs:805),且 codex 不设 `$CLAUDE_PROJECT_DIR`(项目级 source.env 空 discovery.rs:103-112),故现有回退对 codex 已落 process.cwd()=项目根,.wolf 解析正确——**无需改码**。anchor 计划的 `envelope.cwd` 冗余:envelope.cwd==request.cwd==process.cwd()(pre_tool_use.rs:170-186,Q4)。stale-leak 边角(codex 从 Claude 会话内调起,`CLAUDE_PROJECT_DIR` 被继承)实测会解析到错误项目——真实但窄;修法(`OPENWOLF_AGENT=codex` 命令串 + getWolfDir 忽略 stale env)会让 hook 引入 spawn 失败风险换窄边角消除,simplicity-first 不做,记 §7 DEFERRED | 改 getWolfDir 加 codex 分支用 envelope.cwd(前提证伪:envelope.cwd==process.cwd());命令串设 `OPENWOLF_AGENT=codex` 防边角(引入 spawn 失败风险) |
 
 ## §6 量化目标(验收)
 
@@ -105,6 +106,7 @@ agent event ────┤                                                     
 ## §7 遗留 / 延后
 
 - Codex Bash 命令解析增强(从 cat 命令提取 file_path 记读事件)→ P2 后评估,D1 已记录。
+- **Codex stale-`CLAUDE_PROJECT_DIR`-leak 边角(D7)**:codex 从 Claude 会话内调起时,父进程 `CLAUDE_PROJECT_DIR` 被继承,hook 会把 .wolf 解析到错误项目(codex-cwd-test §2 实测)。窄场景,暂不修;若实际命中再回访修法(`OPENWOLF_AGENT=codex` 命令串 + agent-aware getWolfDir 忽略 stale env)。
 - OpenCode SSE 备选若 shim 方案有性能问题再回访(D2)。
 - 其他 agent(gemini-cli / cursor / aider)非本主线范围,适配层为它们预留 normalize 扩展点。
 
