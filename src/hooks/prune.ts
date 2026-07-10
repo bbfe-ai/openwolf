@@ -164,15 +164,60 @@ export function buglogCap(wolfDir: string, maxK: number): number {
   return overflow.length;
 }
 
+// ─── Token-ledger rolling cap ────────────────────────────────────
+
+interface Ledger {
+  version: number;
+  sessions: unknown[];
+  [key: string]: unknown;
+}
+
+/**
+ * Keep only the most recent `maxK` entries in token-ledger.json's `sessions[]`;
+ * archive the overflow (oldest) verbatim to .wolf/archive/ledger-YYYYMM.json —
+ * lossless. `lifetime` totals are cumulative and never touched. Mirrors buglogCap.
+ * (OPT-9: token-ledger.json was the fourth bloat file — one push per session,
+ * no cap, so it grew linearly with session count.)
+ */
+export function ledgerCap(wolfDir: string, maxK: number): number {
+  if (!(maxK > 0)) return 0;
+  const ledgerPath = path.join(wolfDir, "token-ledger.json");
+  const ledger = readJSON<Ledger>(ledgerPath, { version: 1, sessions: [] });
+  if (!Array.isArray(ledger.sessions) || ledger.sessions.length <= maxK) return 0;
+
+  const overflow = ledger.sessions.slice(0, ledger.sessions.length - maxK);
+  const kept = ledger.sessions.slice(ledger.sessions.length - maxK);
+  if (overflow.length === 0) return 0;
+
+  const archiveDir = path.join(wolfDir, "archive");
+  const month = new Date().toISOString().slice(0, 7).replace("-", "");
+  const archivePath = path.join(archiveDir, `ledger-${month}.json`);
+  try {
+    if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+    const existing = readJSON<{ version: number; sessions: unknown[] }>(archivePath, { version: 1, sessions: [] });
+    existing.sessions.push(...overflow);
+    writeJSON(archivePath, existing);
+  } catch {
+    return 0; // Don't drop overflow if archiving failed.
+  }
+
+  ledger.sessions = kept;
+  writeJSON(ledgerPath, ledger);
+  return overflow.length;
+}
+
 // ─── Combined entry point for the Stop hook ──────────────────────
 
 /** Run all write-path governance using values from .wolf/config.json. */
 export function runPrune(wolfDir: string): void {
   const mem = readConfig().memory ?? {};
   const bug = readConfig().buglog ?? {};
+  const led = readConfig().ledger ?? {};
   const olderThanDays = typeof mem.consolidation_after_days === "number" ? mem.consolidation_after_days : 7;
   const maxEntries = typeof mem.max_entries_before_consolidation === "number" ? mem.max_entries_before_consolidation : 200;
   const bugMax = typeof bug.max_entries === "number" ? bug.max_entries : 200;
+  const ledgerMax = typeof led.max_sessions === "number" ? led.max_sessions : 200;
   try { consolidateMemory(wolfDir, olderThanDays, maxEntries); } catch {}
   try { buglogCap(wolfDir, bugMax); } catch {}
+  try { ledgerCap(wolfDir, ledgerMax); } catch {}
 }
