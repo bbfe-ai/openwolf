@@ -2,8 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { execSync, spawnSync } from "node:child_process";
 import cron from "node-cron";
-import { readJSON, writeJSON, writeText, appendText } from "../utils/fs-safe.js";
-import { consolidateMemory } from "../hooks/prune.js";
+import { readJSON, writeJSON, appendText } from "../utils/fs-safe.js";
+import { consolidateMemory, backupAndWriteCerebrum } from "../hooks/prune.js";
 import { scanProject } from "../scanner/anatomy-scanner.js";
 import { detectWaste } from "../tracker/waste-detector.js";
 import type { Logger } from "../utils/logger.js";
@@ -215,7 +215,11 @@ export class CronEngine {
         break;
 
       case "consolidate_memory":
-        consolidateMemory(this.wolfDir, action.params?.older_than_days as number ?? 7);
+        consolidateMemory(
+          this.wolfDir,
+          action.params?.older_than_days as number ?? 7,
+          action.params?.max_entries as number ?? 200,
+        );
         break;
 
       case "generate_token_report":
@@ -319,7 +323,9 @@ export class CronEngine {
       } catch {
         // Not JSON, might be a cerebrum update
         if (result.includes("## User Preferences") || result.includes("## Key Learnings") || result.includes("# Cerebrum")) {
-          writeText(path.join(this.wolfDir, "cerebrum.md"), result);
+          // OPT-13: back up cerebrum.md before overwriting (lossless); throws
+          // (leaving the existing file intact) if the backup fails.
+          backupAndWriteCerebrum(this.wolfDir, result);
         }
       }
     } catch (err) {

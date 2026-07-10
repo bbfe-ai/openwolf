@@ -221,3 +221,31 @@ export function runPrune(wolfDir: string): void {
   try { buglogCap(wolfDir, bugMax); } catch {}
   try { ledgerCap(wolfDir, ledgerMax); } catch {}
 }
+
+// ─── Cerebrum backup-before-overwrite ────────────────────────────
+
+/**
+ * Back up the existing cerebrum.md to .wolf/archive/cerebrum-<timestamp>.md
+ * (lossless), THEN overwrite cerebrum.md with `result`. If the backup fails,
+ * throw and leave the existing cerebrum.md untouched — a bad AI result
+ * (hallucination / truncation) must never destroy known-good knowledge.
+ * (OPT-13: ai_task used to overwrite cerebrum.md with no backup.)
+ * Returns the backup file path, or null when there was no prior cerebrum.md.
+ */
+export function backupAndWriteCerebrum(wolfDir: string, result: string): string | null {
+  const cerebrumPath = path.join(wolfDir, "cerebrum.md");
+  let backupPath: string | null = null;
+  if (fs.existsSync(cerebrumPath)) {
+    const archiveDir = path.join(wolfDir, "archive");
+    if (!fs.existsSync(archiveDir)) fs.mkdirSync(archiveDir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    backupPath = path.join(archiveDir, `cerebrum-${stamp}.md`);
+    try {
+      fs.copyFileSync(cerebrumPath, backupPath);
+    } catch (e) {
+      throw new Error(`cerebrum backup failed (refusing to overwrite cerebrum.md): ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+  fs.writeFileSync(cerebrumPath, result, "utf-8");
+  return backupPath;
+}
