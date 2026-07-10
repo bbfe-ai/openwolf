@@ -6,6 +6,8 @@ import { capDescription as cap } from "./descriptions/cap.js";
 import { extractSql, extractProto, extractGraphQL, extractYaml, extractToml, extractElixir, extractLua, extractZig } from "./descriptions/data.js";
 import { extractVue, extractCss } from "./descriptions/web.js";
 import { extractPython, extractGo, extractRust, extractJava, extractKotlin, extractCSharp, extractRuby, extractSwift, extractDart } from "./descriptions/systems.js";
+import { extractPhp } from "./descriptions/php.js";
+import { extractTsJs } from "./descriptions/tsjs.js";
 
 // Agent adapter seam (initiative 11) — imported here so readNormalizedStdin() can
 // detect+normalize cross-agent events in one place, and re-exported so hooks can
@@ -256,105 +258,10 @@ export function extractDescription(filePath: string): string {
   }
 
   // ─── PHP / Laravel ───────────────────────────────────────
-  if (ext === ".php") {
-    if (basename.endsWith(".blade.php")) {
-      const ext2 = content.match(/@extends\(\s*['"]([^'"]+)['"]\s*\)/);
-      const sections = (content.match(/@section\(\s*['"](\w+)['"]/g) || []).map(s => s.match(/['"](\w+)['"]/)?.[1]).filter(Boolean);
-      const parts: string[] = [];
-      if (ext2) parts.push(`extends ${ext2[1]}`);
-      if (sections.length) parts.push(`sections: ${sections.join(", ")}`);
-      return cap(parts.length ? `Blade: ${parts.join(", ")}` : "Blade template");
-    }
-
-    const classM = content.match(/class\s+(\w+)(?:\s+extends\s+(\w+))?/);
-    const className = classM?.[1] || "";
-    const parent = classM?.[2] || "";
-    const pubMethods = (content.match(/public\s+function\s+(\w+)/g) || [])
-      .map(m => m.match(/public\s+function\s+(\w+)/)?.[1])
-      .filter(n => n && n !== "__construct" && n !== "middleware") as string[];
-
-    if (basename.endsWith("Controller.php") || parent === "Controller") {
-      if (pubMethods.length > 0) {
-        const display = pubMethods.slice(0, 5).join(", ");
-        return cap(pubMethods.length > 5 ? `${display} + ${pubMethods.length - 5} more` : display);
-      }
-    }
-
-    if (parent === "Model" || parent === "Authenticatable") {
-      const parts: string[] = [];
-      const tbl = content.match(/\$table\s*=\s*['"]([^'"]+)['"]/);
-      if (tbl) parts.push(`table: ${tbl[1]}`);
-      const fill = content.match(/\$fillable\s*=\s*\[([^\]]*)\]/s);
-      if (fill) { const c = (fill[1].match(/['"]/g) || []).length / 2; parts.push(`${Math.floor(c)} fields`); }
-      const rels = (content.match(/\$this->(hasMany|hasOne|belongsTo|belongsToMany|morphMany|morphTo)\(/g) || []).length;
-      if (rels) parts.push(`${rels} rels`);
-      return cap(parts.length ? `Model — ${parts.join(", ")}` : `Model: ${className}`);
-    }
-
-    if (basename.match(/^\d{4}_\d{2}_\d{2}/)) {
-      const create = content.match(/Schema::create\(\s*['"]([^'"]+)['"]/);
-      if (create) return `Migration: create ${create[1]} table`;
-      const alter = content.match(/Schema::table\(\s*['"]([^'"]+)['"]/);
-      if (alter) return `Migration: alter ${alter[1]} table`;
-      return "Database migration";
-    }
-
-    if (className && pubMethods.length > 0) {
-      const display = pubMethods.slice(0, 4).join(", ");
-      return cap(pubMethods.length > 4 ? `${className}: ${display} + ${pubMethods.length - 4} more` : `${className}: ${display}`);
-    }
-  }
+  if (ext === ".php") { const d = extractPhp(content, basename); if (d !== null) return d; }
 
   // ─── TS/JS/React/Next.js ─────────────────────────────────
-  if (ext === ".ts" || ext === ".tsx" || ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs") {
-    // React component
-    if (ext === ".tsx" || ext === ".jsx") {
-      const comp = content.match(/(?:export\s+(?:default\s+)?)?(?:function|const)\s+(\w+)/);
-      const parts: string[] = [];
-      if (comp) parts.push(comp[1]);
-      const renders: string[] = [];
-      if (/<(?:form|Form)/i.test(content)) renders.push("form");
-      if (/<(?:table|Table|DataTable)/i.test(content)) renders.push("table");
-      if (/<(?:dialog|Dialog|Modal|Drawer)/i.test(content)) renders.push("modal");
-      if (renders.length) parts.push(`renders ${renders.join(", ")}`);
-      if (parts.length) return cap(parts.join(" — "));
-    }
-
-    // Next.js conventions
-    if (basename === "page.tsx" || basename === "page.js") return "Next.js page component";
-    if (basename === "layout.tsx" || basename === "layout.js") return "Next.js layout";
-    if (basename === "route.ts" || basename === "route.js") {
-      const methods = [...new Set((content.match(/export\s+(?:async\s+)?function\s+(GET|POST|PUT|PATCH|DELETE)/g) || [])
-        .map(m => m.match(/(GET|POST|PUT|PATCH|DELETE)/)?.[1]))].filter(Boolean);
-      return methods.length ? `Next.js API route: ${methods.join(", ")}` : "Next.js API route";
-    }
-
-    // Express/Fastify routes
-    const routeHits = content.match(/\.(get|post|put|patch|delete)\s*\(\s*['"`]/g);
-    if (routeHits && routeHits.length > 0) {
-      const methods = [...new Set(routeHits.map(r => r.match(/\.(get|post|put|patch|delete)/)?.[1]?.toUpperCase()))];
-      return cap(`API routes: ${methods.join(", ")} (${routeHits.length} endpoints)`);
-    }
-
-    // tRPC router
-    if (content.includes("createTRPCRouter") || content.includes("publicProcedure")) {
-      const procs = (content.match(/\.(query|mutation|subscription)\s*\(/g) || []).length;
-      return procs ? `tRPC router: ${procs} procedures` : "tRPC router";
-    }
-
-    // Zod schemas
-    if (content.includes("z.object") || content.includes("z.string")) {
-      const schemas = (content.match(/(?:export\s+)?(?:const|let)\s+(\w+)\s*=\s*z\./g) || [])
-        .map(s => s.match(/(?:const|let)\s+(\w+)/)?.[1]).filter(Boolean);
-      if (schemas.length) return cap(`Zod schemas: ${schemas.slice(0, 4).join(", ")}${schemas.length > 4 ? ` + ${schemas.length - 4} more` : ""}`);
-    }
-
-    // Exports summary
-    const exports = (content.match(/export\s+(?:async\s+)?(?:function|class|const|interface|type|enum)\s+(\w+)/g) || [])
-      .map(e => e.match(/(\w+)$/)?.[1]).filter(Boolean) as string[];
-    if (exports.length > 0 && exports.length <= 5) return `Exports ${exports.join(", ")}`;
-    if (exports.length > 5) return cap(`Exports ${exports.slice(0, 4).join(", ")} + ${exports.length - 4} more`);
-  }
+  if (ext === ".ts" || ext === ".tsx" || ext === ".js" || ext === ".jsx" || ext === ".mjs" || ext === ".cjs") { const d = extractTsJs(content, basename, ext); if (d !== null) return d; }
 
   // ─── Python / Django / FastAPI / Flask ────────────────────
   if (ext === ".py") { const d = extractPython(content); if (d !== null) return d; }
