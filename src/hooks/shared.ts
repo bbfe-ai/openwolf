@@ -2,6 +2,11 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
+// Agent adapter seam (initiative 11) — re-exported so hooks can detect/normalize
+// cross-agent events without each hook repeating the import path.
+export { detectAgent, normalizeToolEvent } from "./adapters/normalize.js";
+export type { AgentKind, ClaudeShapedEvent } from "./adapters/normalize.js";
+
 export function getWolfDir(): string {
   // Prefer CLAUDE_PROJECT_DIR so hooks work even if CWD changes during a session
   const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();

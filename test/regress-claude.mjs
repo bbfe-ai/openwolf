@@ -86,6 +86,17 @@ function setup() {
   for (const f of fs.readdirSync(HOOKS)) {
     if (f.endsWith(".js")) fs.copyFileSync(path.join(HOOKS, f), path.join(TESTDIR, ".wolf", "hooks", f));
   }
+  // Deploy the adapter subdirectory too — shared.js imports ./adapters/normalize.js
+  // (initiative 11). Without this the hooks fail to load (ERR_MODULE_NOT_FOUND)
+  // and every assertion becomes a false positive.
+  const adaptSrc = path.join(HOOKS, "adapters");
+  const adaptDst = path.join(TESTDIR, ".wolf", "hooks", "adapters");
+  if (fs.existsSync(adaptSrc)) {
+    fs.mkdirSync(adaptDst, { recursive: true });
+    for (const f of fs.readdirSync(adaptSrc)) {
+      if (f.endsWith(".js")) fs.copyFileSync(path.join(adaptSrc, f), path.join(adaptDst, f));
+    }
+  }
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "config.json"), JSON.stringify(CONFIG));
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "anatomy.md"), "# anatomy.md\n\n> Auto-maintained.\n## BuildKit\n- \`src/app.ts\` — main app (~50 tok)\n");
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "cerebrum.md"),
