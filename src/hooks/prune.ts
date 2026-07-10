@@ -89,7 +89,8 @@ export function consolidateMemory(wolfDir: string, olderThanDays: number, maxEnt
       ? "\n\n"
       : `# Memory Archive (${month})\n\n> Full sessions moved out of memory.md by prune. Nothing is lost.\n\n`;
     fs.appendFileSync(archivePath, head + chunk + "\n", "utf-8");
-  } catch {
+  } catch (e) {
+    warnPruneFailure("consolidateMemory archive", e);
     return; // Never drop detail if archiving failed.
   }
 
@@ -155,7 +156,8 @@ export function buglogCap(wolfDir: string, maxK: number): number {
     const existing = readJSON<BugLog>(archivePath, { version: 1, bugs: [] });
     existing.bugs.push(...overflow);
     writeJSON(archivePath, existing);
-  } catch {
+  } catch (e) {
+    warnPruneFailure("buglogCap archive", e);
     return 0; // Don't drop overflow if archiving failed.
   }
 
@@ -197,7 +199,8 @@ export function ledgerCap(wolfDir: string, maxK: number): number {
     const existing = readJSON<{ version: number; sessions: unknown[] }>(archivePath, { version: 1, sessions: [] });
     existing.sessions.push(...overflow);
     writeJSON(archivePath, existing);
-  } catch {
+  } catch (e) {
+    warnPruneFailure("ledgerCap archive", e);
     return 0; // Don't drop overflow if archiving failed.
   }
 
@@ -208,6 +211,14 @@ export function ledgerCap(wolfDir: string, maxK: number): number {
 
 // ─── Combined entry point for the Stop hook ──────────────────────
 
+// Surface prune-step failures to stderr instead of swallowing silently, so
+// disk-full / permission / archive errors don't become invisible (OPT-10).
+// Each step still fails safe (returns without dropping data) — this only adds
+// a stderr notice so the user knows prune didn't fully run.
+function warnPruneFailure(step: string, e: unknown): void {
+  process.stderr.write(`openwolf prune: ${step} failed: ${e instanceof Error ? e.message : String(e)}\n`);
+}
+
 /** Run all write-path governance using values from .wolf/config.json. */
 export function runPrune(wolfDir: string): void {
   const mem = readConfig().memory ?? {};
@@ -217,9 +228,9 @@ export function runPrune(wolfDir: string): void {
   const maxEntries = typeof mem.max_entries_before_consolidation === "number" ? mem.max_entries_before_consolidation : 200;
   const bugMax = typeof bug.max_entries === "number" ? bug.max_entries : 200;
   const ledgerMax = typeof led.max_sessions === "number" ? led.max_sessions : 200;
-  try { consolidateMemory(wolfDir, olderThanDays, maxEntries); } catch {}
-  try { buglogCap(wolfDir, bugMax); } catch {}
-  try { ledgerCap(wolfDir, ledgerMax); } catch {}
+  try { consolidateMemory(wolfDir, olderThanDays, maxEntries); } catch (e) { warnPruneFailure("consolidateMemory", e); }
+  try { buglogCap(wolfDir, bugMax); } catch (e) { warnPruneFailure("buglogCap", e); }
+  try { ledgerCap(wolfDir, ledgerMax); } catch (e) { warnPruneFailure("ledgerCap", e); }
 }
 
 // ─── Cerebrum backup-before-overwrite ────────────────────────────
