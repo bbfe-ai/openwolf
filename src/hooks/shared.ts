@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import { KNOWN_DESCRIPTIONS } from "./descriptions/known.js";
 import { capDescription as cap } from "./descriptions/cap.js";
+import { extractSql, extractProto, extractGraphQL, extractYaml, extractToml, extractElixir, extractLua, extractZig } from "./descriptions/data.js";
 
 // Agent adapter seam (initiative 11) — imported here so readNormalizedStdin() can
 // detect+normalize cross-agent events in one place, and re-exported so hooks can
@@ -518,69 +519,26 @@ export function extractDescription(filePath: string): string {
   }
 
   // ─── SQL ─────────────────────────────────────────────────
-  if (ext === ".sql") {
-    const creates = (content.match(/CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?(\w+)/gi) || [])
-      .map(m => m.match(/(?:TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?)([`"']?\w+)/i)?.[1]?.replace(/[`"']/g, "")).filter(Boolean);
-    if (creates.length) return cap(`SQL: tables: ${creates.slice(0, 4).join(", ")}`);
-  }
+  if (ext === ".sql") { const d = extractSql(content); if (d !== null) return d; }
 
   // ─── Proto / GraphQL ─────────────────────────────────────
-  if (ext === ".proto") {
-    const msgs = (content.match(/message\s+(\w+)/g) || []).map(m => m.match(/message\s+(\w+)/)?.[1]).filter(Boolean);
-    const services = (content.match(/service\s+(\w+)/g) || []).map(m => m.match(/service\s+(\w+)/)?.[1]).filter(Boolean);
-    const parts: string[] = [];
-    if (msgs.length) parts.push(`messages: ${msgs.slice(0, 3).join(", ")}`);
-    if (services.length) parts.push(`services: ${services.join(", ")}`);
-    return cap(parts.length ? `Proto: ${parts.join(", ")}` : "");
-  }
-  if (ext === ".graphql" || ext === ".gql") {
-    const types = (content.match(/type\s+(\w+)/g) || []).map(m => m.match(/type\s+(\w+)/)?.[1]).filter(Boolean);
-    return cap(types.length ? `GraphQL: types: ${types.slice(0, 4).join(", ")}` : "GraphQL schema");
-  }
+  if (ext === ".proto") { const d = extractProto(content); if (d !== null) return d; }
+  if (ext === ".graphql" || ext === ".gql") { const d = extractGraphQL(content); if (d !== null) return d; }
 
   // ─── YAML ────────────────────────────────────────────────
-  if (ext === ".yaml" || ext === ".yml") {
-    if (content.includes("runs-on:")) {
-      const name = content.match(/^name:\s*(.+)$/m);
-      return cap(name ? `CI: ${name[1].trim()}` : "GitHub Actions workflow");
-    }
-    if (content.includes("apiVersion:") && content.includes("kind:")) {
-      const kind = content.match(/kind:\s*(\w+)/);
-      return cap(kind ? `K8s ${kind[1]}` : "Kubernetes manifest");
-    }
-    if (content.includes("services:") && (basename.includes("docker") || basename.includes("compose"))) {
-      const services = (content.match(/^\s{2}\w+:/gm) || []).length;
-      return `Docker Compose: ${services} services`;
-    }
-  }
+  if (ext === ".yaml" || ext === ".yml") { const d = extractYaml(content, basename); if (d !== null) return d; }
 
   // ─── TOML ────────────────────────────────────────────────
-  if (ext === ".toml") {
-    const desc = content.match(/^description\s*=\s*"([^"]+)"/m);
-    if (desc) return cap(desc[1]);
-  }
+  if (ext === ".toml") { const d = extractToml(content); if (d !== null) return d; }
 
-  // ─── Elixir ──────────────────────────────────────────────
-  if (ext === ".ex" || ext === ".exs") {
-    const mod = content.match(/defmodule\s+([\w.]+)/);
-    if (content.includes("Phoenix.LiveView")) return cap(mod ? `LiveView: ${mod[1]}` : "Phoenix LiveView");
-    if (content.includes("Controller")) return cap(mod ? `Phoenix controller: ${mod[1]}` : "Phoenix controller");
-    const fns = (content.match(/def\s+(\w+)/g) || []).map(m => m.match(/def\s+(\w+)/)?.[1]).filter(Boolean);
-    if (mod && fns.length) return cap(`${mod[1]}: ${fns.slice(0, 4).join(", ")}`);
-    if (mod) return mod[1];
-  }
+  // ─── Elixir (phase 2) ────────────────────────────────────
+  if (ext === ".ex" || ext === ".exs") { const d = extractElixir(content); if (d !== null) return d; }
 
   // ─── Lua ─────────────────────────────────────────────────
-  if (ext === ".lua") {
-    const fns = (content.match(/function\s+(?:\w+[.:])?(\w+)/g) || []).map(m => m.match(/(\w+)\s*$/)?.[1]).filter(Boolean);
-    if (fns.length) return cap(fns.slice(0, 5).join(", "));
-  }
+  if (ext === ".lua") { const d = extractLua(content); if (d !== null) return d; }
 
   // ─── Zig ─────────────────────────────────────────────────
-  if (ext === ".zig") {
-    const fns = (content.match(/pub\s+fn\s+(\w+)/g) || []).map(m => m.match(/fn\s+(\w+)/)?.[1]).filter(Boolean);
-    if (fns.length) return cap(fns.slice(0, 5).join(", "));
-  }
+  if (ext === ".zig") { const d = extractZig(content); if (d !== null) return d; }
 
   // Last resort
   const declM = content.match(/(?:function|class|const|interface|type|enum)\s+(\w+)/);
