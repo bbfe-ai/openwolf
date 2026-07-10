@@ -31,6 +31,11 @@ export function createProgram(): Command {
   program
     .command("init")
     .description("Initialize .wolf/ in current project")
+    .option(
+      "--agent <kind>",
+      "Which AI agent to wire OpenWolf into (claude | codex | opencode). Default: claude",
+      "claude",
+    )
     .action(initCommand);
 
   program

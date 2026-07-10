@@ -118,7 +118,112 @@ const HOOK_SETTINGS = {
   },
 };
 
-export async function initCommand(): Promise<void> {
+// Shape shared by HOOK_SETTINGS (Claude) and CODEX_HOOK_SETTINGS (Codex) so the
+// same replaceOpenWolfHooks merge logic preserves user hooks across both agents.
+type HookSettingsShape = {
+  hooks: Record<
+    string,
+    Array<{
+      matcher?: string;
+      hooks: Array<{ type: string; command?: string; [k: string]: unknown }>;
+    }>
+  >;
+};
+
+// Codex (OpenAI) hooks config — written to <project>/.codex/hooks.json.
+//
+// Codex's hook plumbing is Claude-compatible (stdin JSON envelope, same matcher
+// syntax, a superset of events) but differs in two ways that shape this config:
+//
+//   1. No $CLAUDE_PROJECT_DIR. Codex spawns hook processes with cwd = the session
+//      project root (codex-rs/core/src/config/mod.rs:805 `config.cwd`;
+//      hooks/src/engine/command_runner.rs:49-65 .current_dir(cwd)), so commands
+//      use RELATIVE paths `.wolf/hooks/*.js` — they resolve against the project
+//      root. Verified: project-level hooks.json source.env is empty HashMap
+//      (discovery.rs:103-112), and discovery.rs:499-501 only substitutes ${KEY}
+//      for keys present in source.env — so ${CODEX_PROJECT_DIR} / $CLAUDE_PROJECT_DIR
+//      would NOT be expanded (left literal, or shell-expanded to empty). codex
+//      injects no project-root env var for project hooks (command_runner.rs:176
+//      only sets handler.env). commandWindows gives backslash paths for cmd.exe
+//      on Windows (the shell codex uses on Windows per command_runner.rs:180-196).
+//
+//   2. Codex edits files via the `apply_patch` tool (a V4A patch text in
+//      tool_input.command), so PreToolUse/PostToolUse matchers target
+//      "apply_patch" — not Read/Write/Edit. Codex has no dedicated Read tool
+//      (reads via Bash), so there is no pre-read/post-read wiring (D1: codex
+//      reads via Bash, no clean file-shaped event).
+//
+// Codex reuses the SAME hook scripts as Claude; the adapter seam (adapters/normalize.ts)
+// routes codex apply_patch envelopes into the Claude-shaped Edit events the hook
+// core already consumes. The 4 events below match the T2.3 anchor.
+const CODEX_HOOK_SETTINGS: HookSettingsShape = {
+  hooks: {
+    SessionStart: [
+      {
+        matcher: "",
+        hooks: [
+          {
+            type: "command",
+            command: "node .wolf/hooks/session-start.js",
+            commandWindows: "node .wolf\\hooks\\session-start.js",
+            timeout: 5,
+          },
+        ],
+      },
+    ],
+    PreToolUse: [
+      {
+        matcher: "apply_patch",
+        hooks: [
+          {
+            type: "command",
+            command: "node .wolf/hooks/pre-write.js",
+            commandWindows: "node .wolf\\hooks\\pre-write.js",
+            timeout: 5,
+          },
+        ],
+      },
+    ],
+    PostToolUse: [
+      {
+        matcher: "apply_patch",
+        hooks: [
+          {
+            type: "command",
+            command: "node .wolf/hooks/post-write.js",
+            commandWindows: "node .wolf\\hooks\\post-write.js",
+            timeout: 10,
+          },
+        ],
+      },
+    ],
+    Stop: [
+      {
+        matcher: "",
+        hooks: [
+          {
+            type: "command",
+            command: "node .wolf/hooks/stop.js",
+            commandWindows: "node .wolf\\hooks\\stop.js",
+            timeout: 10,
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export interface InitOptions {
+  agent?: string;
+}
+
+export async function initCommand(options: InitOptions = {}): Promise<void> {
+  const agent = (options.agent || "claude").toLowerCase();
+  if (!["claude", "codex", "opencode"].includes(agent)) {
+    console.error(`Unknown --agent value: ${options.agent}. Use claude | codex | opencode.`);
+    process.exit(1);
+  }
+
   // Check Node.js version
   const nodeVersion = parseInt(process.version.slice(1), 10);
   if (nodeVersion < 20) {
@@ -182,35 +287,43 @@ export async function initCommand(): Promise<void> {
   // --- Hook scripts: always update (bug fixes, new features) ---
   copyHookScripts(wolfDir);
 
-  // --- Claude settings: replace OpenWolf hooks (upgrade old paths) ---
-  const claudeDir = path.join(projectRoot, ".claude");
-  ensureDir(claudeDir);
+  // --- Agent-specific hook registration ---
+  // Claude Code writes .claude/{settings.json,rules/openwolf.md} + a CLAUDE.md snippet.
+  // Codex writes .codex/hooks.json (discovered by codex's project config layer).
+  // OpenCode is wired via an in-process plugin shim (T3.4) — no settings file here.
+  if (agent === "claude") {
+    // --- Claude settings: replace OpenWolf hooks (upgrade old paths) ---
+    const claudeDir = path.join(projectRoot, ".claude");
+    ensureDir(claudeDir);
 
-  const settingsPath = path.join(claudeDir, "settings.json");
-  if (fs.existsSync(settingsPath)) {
-    const existing = readJSON<Record<string, unknown>>(settingsPath, {});
-    const merged = replaceOpenWolfHooks(existing, HOOK_SETTINGS);
-    writeJSON(settingsPath, merged);
-  } else {
-    writeJSON(settingsPath, HOOK_SETTINGS);
-  }
-
-  // --- Claude rules: always update ---
-  const rulesDir = path.join(claudeDir, "rules");
-  ensureDir(rulesDir);
-  const rulesContent = readTemplateContent("claude-rules-openwolf.md", actualTemplatesDir);
-  writeText(path.join(rulesDir, "openwolf.md"), rulesContent);
-
-  // --- CLAUDE.md: add snippet if missing ---
-  const claudeMdPath = path.join(projectRoot, "CLAUDE.md");
-  const snippetContent = readTemplateContent("claude-md-snippet.md", actualTemplatesDir);
-  if (fs.existsSync(claudeMdPath)) {
-    const existing = readText(claudeMdPath);
-    if (!existing.includes("OpenWolf")) {
-      writeText(claudeMdPath, snippetContent + "\n\n" + existing);
+    const settingsPath = path.join(claudeDir, "settings.json");
+    if (fs.existsSync(settingsPath)) {
+      const existing = readJSON<Record<string, unknown>>(settingsPath, {});
+      const merged = replaceOpenWolfHooks(existing, HOOK_SETTINGS);
+      writeJSON(settingsPath, merged);
+    } else {
+      writeJSON(settingsPath, HOOK_SETTINGS);
     }
-  } else {
-    writeText(claudeMdPath, snippetContent);
+
+    // --- Claude rules: always update ---
+    const rulesDir = path.join(claudeDir, "rules");
+    ensureDir(rulesDir);
+    const rulesContent = readTemplateContent("claude-rules-openwolf.md", actualTemplatesDir);
+    writeText(path.join(rulesDir, "openwolf.md"), rulesContent);
+
+    // --- CLAUDE.md: add snippet if missing ---
+    const claudeMdPath = path.join(projectRoot, "CLAUDE.md");
+    const snippetContent = readTemplateContent("claude-md-snippet.md", actualTemplatesDir);
+    if (fs.existsSync(claudeMdPath)) {
+      const existing = readText(claudeMdPath);
+      if (!existing.includes("OpenWolf")) {
+        writeText(claudeMdPath, snippetContent + "\n\n" + existing);
+      }
+    } else {
+      writeText(claudeMdPath, snippetContent);
+    }
+  } else if (agent === "codex") {
+    writeCodexHooksConfig(projectRoot);
   }
 
   // --- Anatomy scan: only on fresh init ---
@@ -267,24 +380,30 @@ export async function initCommand(): Promise<void> {
   }
 
   // --- Summary ---
+  const agentLabel = agent === "codex" ? "Codex" : agent === "opencode" ? "OpenCode" : "Claude Code";
+  const hooksCount = agent === "codex" ? 4 : agent === "opencode" ? 0 : 6;
   console.log("");
   if (isUpgrade) {
     console.log(`  ✓ OpenWolf upgraded to v${version}`);
     console.log(`  ✓ All .wolf data preserved (${skippedCount} files: cerebrum, memory, anatomy, buglog, ledger)`);
-    console.log(`  ✓ Hook scripts updated (6 hooks)`);
+    console.log(`  ✓ Hook scripts updated (${hooksCount} hooks)`);
     console.log(`  ✓ ${createdCount} config files updated`);
     console.log(`  ✓ Anatomy: ${fileCount} files tracked (unchanged)`);
   } else {
     console.log(`  ✓ OpenWolf v${version} initialized`);
     console.log(`  ✓ .wolf/ created with ${createdCount} files`);
-    console.log(`  ✓ Claude Code hooks registered (6 hooks)`);
-    console.log(`  ✓ CLAUDE.md updated`);
-    console.log(`  ✓ .claude/rules/openwolf.md created`);
+    console.log(`  ✓ ${agentLabel} hooks registered (${hooksCount} hooks)`);
+    if (agent === "claude") {
+      console.log(`  ✓ CLAUDE.md updated`);
+      console.log(`  ✓ .claude/rules/openwolf.md created`);
+    } else if (agent === "codex") {
+      console.log(`  ✓ .codex/hooks.json created`);
+    }
     console.log(`  ✓ Anatomy scan: ${fileCount} files indexed`);
   }
   console.log(`  ✓ Daemon: ${daemonStatus}`);
   console.log("");
-  console.log("  You're ready. Just use 'claude' as normal — OpenWolf is watching.");
+  console.log(`  You're ready. Just use '${agent === "claude" ? "claude" : agent}' as normal — OpenWolf is watching.`);
   console.log("");
 }
 
@@ -480,19 +599,43 @@ function copyHookScripts(wolfDir: string): void {
 }
 
 /**
- * Replace all OpenWolf hook entries in settings.json with the current version.
- * Removes old-style relative-path hooks and inserts the new $CLAUDE_PROJECT_DIR hooks.
- * Preserves any non-OpenWolf hooks the user may have added.
+ * Write .codex/hooks.json for Codex (OpenAI). Codex discovers project-level hooks
+ * from <project>/.codex/hooks.json (config/src/state.rs:213 — Project layer
+ * config_folder = dot_codex_folder; hooks/src/engine/discovery.rs:303
+ * load_hooks_json reads <config_folder>/hooks.json). The HooksFile schema
+ * (hook_config.rs:10-159) is {description?, hooks:{<Event>:[{matcher?, hooks:
+ * [{type:"command",command,...}]}]}} with deny_unknown_fields — so we write exactly
+ * description + hooks, nothing else. See CODEX_HOOK_SETTINGS for the cwd/matcher
+ * rationale. On upgrade, merge (preserve any non-OpenWolf hooks the user added).
+ */
+function writeCodexHooksConfig(projectRoot: string): void {
+  const codexDir = path.join(projectRoot, ".codex");
+  ensureDir(codexDir);
+  const settingsPath = path.join(codexDir, "hooks.json");
+  if (fs.existsSync(settingsPath)) {
+    const existing = readJSON<Record<string, unknown>>(settingsPath, {});
+    const merged = replaceOpenWolfHooks(existing, CODEX_HOOK_SETTINGS);
+    writeJSON(settingsPath, merged);
+  } else {
+    writeJSON(settingsPath, CODEX_HOOK_SETTINGS);
+  }
+}
+
+/**
+ * Replace all OpenWolf hook entries in a hooks settings object with the current
+ * version. Removes old-style OpenWolf hooks (matched by `.wolf/hooks/` in command)
+ * and inserts the new ones. Preserves any non-OpenWolf hooks the user may have
+ * added. Used for both Claude .claude/settings.json and Codex .codex/hooks.json.
  */
 function replaceOpenWolfHooks(
   existing: Record<string, unknown>,
-  hookSettings: typeof HOOK_SETTINGS
+  hookSettings: HookSettingsShape
 ): Record<string, unknown> {
   const merged = { ...existing };
   if (!merged.hooks) {
     merged.hooks = {};
   }
-  const hooks = merged.hooks as Record<string, Array<{ matcher: string; hooks: Array<{ command?: string; type: string }> }>>;
+  const hooks = merged.hooks as Record<string, Array<{ matcher?: string; hooks: Array<{ command?: string; type: string }> }>>;
 
   for (const [event, newMatchers] of Object.entries(hookSettings.hooks)) {
     if (!hooks[event]) {
