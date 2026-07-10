@@ -4,6 +4,7 @@ import { execSync, spawnSync } from "node:child_process";
 import cron from "node-cron";
 import { readJSON, writeJSON, appendText } from "../utils/fs-safe.js";
 import { consolidateMemory, backupAndWriteCerebrum } from "../hooks/prune.js";
+import { readConfig } from "../hooks/shared.js";
 import { scanProject } from "../scanner/anatomy-scanner.js";
 import { detectWaste } from "../tracker/waste-detector.js";
 import type { Logger } from "../utils/logger.js";
@@ -43,6 +44,16 @@ interface CronState {
   execution_log: ExecutionEntry[];
   dead_letter_queue: Array<{ task_id: string; error: string; timestamp: string; attempts: number }>;
   upcoming: unknown[];
+}
+
+// OPT-26: cerebrum.max_tokens was dead config — the cerebrum-reflection prompt
+// hardcoded "2000 tokens" instead of reading the config value. Resolve the
+// {{cerebrum.max_tokens}} placeholder in the prompt so the limit is respected.
+// Exported (pure) so it can be unit-tested without spawning claude -p.
+export function resolveCerebrumMaxTokens(prompt: string, config: Record<string, any>): string {
+  const cereb = config.cerebrum ?? {};
+  const maxTokens = typeof cereb.max_tokens === "number" ? cereb.max_tokens : 2000;
+  return prompt.replace("{{cerebrum.max_tokens}}", String(maxTokens));
 }
 
 export class CronEngine {
@@ -272,7 +283,8 @@ export class CronEngine {
       }
     }
 
-    const fullPrompt = `${params.prompt}\n\n---\nContext:\n${contextParts.join("\n\n")}`;
+    const prompt = resolveCerebrumMaxTokens(params.prompt, readConfig());
+    const fullPrompt = `${prompt}\n\n---\nContext:\n${contextParts.join("\n\n")}`;
 
     try {
       // Use spawnSync to pipe prompt via stdin — avoids command-line length limits on Windows

@@ -61,7 +61,7 @@
       "action": {
         "type": "ai_task",
         "params": {
-          "prompt": "Review this cerebrum.md. Remove duplicate preferences (keep newer). Remove Do-Not-Repeat entries older than 90 days if no longer relevant. Consolidate Key Learnings that overlap. Keep the file under 2000 tokens. Return the cleaned file content only.",
+          "prompt": "Review this cerebrum.md. Remove duplicate preferences (keep newer). Remove Do-Not-Repeat entries older than 90 days if no longer relevant. Consolidate Key Learnings that overlap. Keep the file under {{cerebrum.max_tokens}} tokens. Return the cleaned file content only.",
           "context_files": [".wolf/cerebrum.md"]
         }
       },
