@@ -69,6 +69,8 @@ export function consolidateMemory(wolfDir: string, olderThanDays: number, maxEnt
   }
 
   // Count-based safety net: archive oldest kept sessions until under the cap.
+  // maxEntries <= 0 (or omitted) means "no cap" — mirrors buglogCap's
+  // `if (!(maxK > 0)) return 0` (prune.ts). 0 is NOT "archive everything".
   if (maxEntries && maxEntries > 0) {
     const totalRows = () => keep.reduce((s, b) => s + b.rows, 0);
     while (keep.length > 1 && totalRows() > maxEntries) {
