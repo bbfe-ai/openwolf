@@ -1,6 +1,7 @@
+<!-- openwolf:v2 -->
 # OpenWolf Operating Protocol
 
-You are working in an OpenWolf-managed project. These rules apply every turn.
+You are working in an OpenWolf-managed project. These rules apply when you interact with .wolf files. Routine file reads and code edits do not require OpenWolf lookups unless you encounter an unfamiliar area or a recurring error.
 
 ## File Navigation
 
@@ -24,13 +25,13 @@ You are working in an OpenWolf-managed project. These rules apply every turn.
 
 ## After Actions
 
-1. After every significant action, append a one-line entry to `.wolf/memory.md`:
+1. memory.md logging is optional and config-gated; when enabled, only append entries that capture genuinely useful session context:
    `| HH:MM | description | file(s) | outcome | ~tokens |`
 2. After creating, deleting, or renaming files: update `.wolf/anatomy.md`.
 
-## Cerebrum Learning (MANDATORY — every session)
+## Cerebrum Learning
 
-OpenWolf's value comes from learning across sessions. You MUST update `.wolf/cerebrum.md` whenever you learn something useful. This is not optional.
+OpenWolf's value comes from learning across sessions. Update `.wolf/cerebrum.md` when you learn something genuinely durable and reusable.
 
 **Update `## User Preferences` when the user:**
 - Corrects your approach ("no, do it this way instead")
@@ -56,15 +57,14 @@ OpenWolf's value comes from learning across sessions. You MUST update `.wolf/cer
 - The user explains why they chose approach A over B
 - A trade-off is explicitly discussed
 
-**The bar is LOW.** If in doubt, add it. A cerebrum entry that's slightly redundant costs nothing. A missing entry means the next session repeats the same discovery process.
+**Only record when you are confident it is durable and reusable.** Prefer a missing entry over noise — the next session can rediscover conventions from the code or `.wolf/anatomy.md`.
 
-## Bug Logging (MANDATORY)
+## Bug Logging
 
 **Log a bug to `.wolf/buglog.json` whenever ANY of these happen:**
 - The user reports an error, bug, or problem
 - A test fails or a command produces an error
 - You fix something that was broken
-- You edit a file more than twice to get it right
 - An import, module, or dependency is missing or wrong
 - A runtime error, type error, or syntax error occurs
 - A build or lint command fails
@@ -90,7 +90,7 @@ OpenWolf's value comes from learning across sessions. You MUST update `.wolf/cer
 }
 ```
 
-**The threshold is LOW.** When in doubt, log it. A false positive in the bug log costs nothing. A missed bug means repeating the same mistake later.
+**Only log real bugs:** test failures, build failures, runtime errors, user-reported issues. A false positive pollutes the bug log and wastes future search; a missed real bug can be logged when it recurs.
 
 ## Token Discipline
 

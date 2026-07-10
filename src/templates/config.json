@@ -53,6 +53,9 @@
       "auto_detect": false,
       "max_entries": 200
     },
+    "ledger": {
+      "max_sessions": 200
+    },
     "cerebrum": {
       "max_tokens": 2000,
       "reflection_frequency": "weekly"
