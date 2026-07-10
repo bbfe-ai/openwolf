@@ -6,11 +6,13 @@ async function main(): Promise<void> {
   ensureWolfDir();
   const wolfDir = getWolfDir();
 
-  // Clean up stale .tmp files left from failed atomic writes
+  // Clean up stale .tmp files left from failed atomic writes (OPT-38: recursive —
+  // writeJSON creates .tmp beside the target, which may live in a subdirectory like
+  // hooks/, archive/, or index/; the old root-only readdir missed those.)
   try {
-    const files = fs.readdirSync(wolfDir);
-    for (const f of files) {
-      if (f.endsWith(".tmp")) {
+    const entries = fs.readdirSync(wolfDir, { recursive: true });
+    for (const f of entries) {
+      if (typeof f === "string" && f.endsWith(".tmp")) {
         try { fs.unlinkSync(path.join(wolfDir, f)); } catch {}
       }
     }
