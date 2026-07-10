@@ -39,7 +39,7 @@
 | P2 codex | T2.2 Codex envelope 归一化(apply_patch→Claude 形状) | ☑ | commit 7db1f04;10/10;envelope snake_case 亲验 |
 | P2 codex | T2.3 `openwolf init --agent codex` 写 .codex/hooks.json | ☑ | commit b6a7f0b;codex-init-test 43/43 + G-regress-claude 8/8 |
 | P2 codex | T2.4 项目根 cwd 适配(替代 $CLAUDE_PROJECT_DIR) | ⊘ | 无需改码:codex-cwd-test 6/6 实跑 process.cwd() 已正确(codex 设 cwd=项目根 Q1);envelope.cwd==process.cwd() 冗余(Q4);stale-leak 边角 DEFERRED;commit 3a777c3 |
-| P2 codex | T2.5 G-codex-e2e 实跑验证 | ☐ | |
+| P2 codex | T2.5 G-codex-e2e 实跑验证 | ☑ | wiring b689274 + e2e b57e09c;G-codex-e2e 9/9 + codex-postwrite-smoke 11/11 + G-regress-claude 8/8 + codex 回归网(v4a 7/normalize 10/cwd 6/init 43);tsc exit 0;C1 零回归 ✓ |
 | P3 opencode | T3.1 TS plugin shim `adapters/opencode-plugin.ts` | ☐ | D2 shim 非 SSE |
 | P3 opencode | T3.2 camelCase→snake_case 字段映射 | ☐ | edit.ts:47-56 |
 | P3 opencode | T3.3 step 事件映射 SessionStart/Stop 边界 | ☐ | B4 |
@@ -58,7 +58,7 @@
 | stop prune 无 daemon | ✅ ☑ | — | — |
 | search 定位非整读 | ✅ ☑ | — | — |
 
-**下一个可执行任务:T2.5**(G-codex-e2e:构造 codex apply_patch envelope 喂 hook.js stdin,跑 20 edit + SessionStart + Stop,断言不爆炸 + V4A file_path 一致)。
+**下一个可执行任务:T3.1**(opencode TS plugin shim:`src/hooks/adapters/opencode-plugin.ts` 导出 Plugin 实现 Hooks,tool.execute.before/after 收 {tool,args} 映射后 spawn `node .wolf/hooks/{pre,post}-write.js`,带 `OPENWOLF_AGENT=opencode` env)。
 
 ## 3. Phase 总览(不带状态列,状态以 §2 为准)
 
@@ -160,6 +160,18 @@
 - 验证点:量化指标对齐 §6 目标表 codex 列;逐断言 PASS/FAIL;exit 0
 - 回滚点:T2.x 各任务
 - 门禁:G-codex-e2e
+
+**完成确认 (T2.5, ☑)**
+- 实现:part (a) 接线 — `shared.ts` 加 `readNormalizedStdin()`(单点读 stdin + detectAgent + normalizeToolEvent → 0..N 个 Claude 形事件);`pre-write.ts` 内联 `for` 循环;`post-write.ts` 抽 `processOne()` helper(~130 行 body 字节不变,relocate 不 re-indent)。claude 路径 = 1 passthrough 事件 → 循环跑一次 → 行为不变(C1)。part (b) 全量 codex e2e gate `test/codex-e2e.mjs`。
+- 重大取舍(范围裁剪,非偷工):`pre-read.ts`/`post-read.ts` 保留 raw `readStdin` — codex 不注册 Read matcher(D1:codex 经 Bash 读),永不被 codex 触发;opencode Read(camelCase)在 T3.x 处理。接线只接 codex 注册的 write 钩子,与 T2.5 锚点一致。
+- 验证点(当场证伪偷工):
+  - tsc exit 0(全量 typecheck;`as string` cast / `processOne` 参 / `ClaudeShapedEvent` import 全过)
+  - G-regress-claude 8/8(C1:claude 路径过循环行为不变)
+  - G-codex-e2e 9/9:codex 全会话(SessionStart + 20 apply_patch + Stop)实跑 — memory/buglog 不增(门控对 codex 成立)/stop prune 归档无损/search→cerebrum 且 anatomy 排除(C2 对 codex 成立)/anatomy 含 app.ts(V4A file_path 跨 20 edit 一致)
+  - codex-postwrite-smoke 11/11:multi-file codex apply_patch → anatomy+session 对 V4A 抽出的文件 mutate(**non-false-green**:接线前 post-write 在 codex 输入下早退、状态不变、e2e 会假绿);codex Bash 无文件事件 → no-op
+  - codex 回归网:v4a-parse 7/7 + codex-normalize 10/10 + codex-cwd 6/6 + codex-init 43/43(接线未破 normalize/init/cwd 层)
+- 门禁:G0-build(tsc exit 0)+ G-regress-claude(8/8)+ G-codex-e2e(9/9,本任务新建)+ codex-postwrite-smoke(11/11,本任务新建)
+- 真 commit hash:接线 b689274 + e2e b57e09c(均已 push 到 feat/context-optimization)
 
 ### T3.1 TS plugin shim
 - 上游:T1.2
