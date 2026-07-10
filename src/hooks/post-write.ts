@@ -104,7 +104,10 @@ function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: stri
       fileContent = input.tool_input?.content ?? "";
     }
 
-    const desc = extractDescription(absolutePath).slice(0, 100);
+    // OPT-28: anatomy description length is configurable (default 100); was hardcoded.
+    const anatomyCfg = readConfig().anatomy ?? {};
+    const maxDescLen = typeof anatomyCfg.max_description_length === "number" ? anatomyCfg.max_description_length : 100;
+    const desc = extractDescription(absolutePath).slice(0, maxDescLen);
     const ext = path.extname(absolutePath).toLowerCase();
     const proseExts = new Set([".md", ".txt", ".rst"]);
     const type = CODE_EXTS.has(ext) ? "code" : proseExts.has(ext) ? "prose" : "mixed";

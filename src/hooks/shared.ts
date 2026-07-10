@@ -612,7 +612,12 @@ export function extractDescription(filePath: string): string {
 }
 
 export function estimateTokens(text: string, type: "code" | "prose" | "mixed" = "mixed"): number {
-  const ratio = type === "code" ? 3.5 : type === "prose" ? 4.0 : 3.75;
+  // OPT-29: chars_per_token_{code,prose} are configurable (default 3.5 / 4.0);
+  // mixed uses the average of the two. readConfig is cached per-process.
+  const ta = readConfig().token_audit ?? {};
+  const codeRatio = typeof ta.chars_per_token_code === "number" ? ta.chars_per_token_code : 3.5;
+  const proseRatio = typeof ta.chars_per_token_prose === "number" ? ta.chars_per_token_prose : 4.0;
+  const ratio = type === "code" ? codeRatio : type === "prose" ? proseRatio : (codeRatio + proseRatio) / 2;
   return Math.ceil(text.length / ratio);
 }
 
