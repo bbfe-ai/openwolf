@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getWolfDir, ensureWolfDir, writeJSON, appendMarkdown, readJSON, timestamp, timeShort, readConfig } from "./shared.js";
+import { getWolfDir, ensureWolfDir, writeJSON, appendMarkdown, readJSON, readStdin, timestamp, timeShort, readConfig } from "./shared.js";
 
 async function main(): Promise<void> {
   ensureWolfDir();
@@ -78,15 +78,29 @@ async function main(): Promise<void> {
     }
   } catch {}
 
-  // Increment total_sessions in token-ledger
+  // Increment total_sessions in token-ledger. OPT-37: dedup by the payload's
+  // session_id — Claude Code / codex can fire SessionStart more than once per
+  // logical session (e.g. reconnect), which previously inflated the count.
+  // The payload session_id is stable for a given session, so skip the increment
+  // when it matches the last one counted. Falls back to unconditional increment
+  // when stdin isn't piped (TTY) or the payload carries no session_id.
   const ledgerPath = path.join(wolfDir, "token-ledger.json");
   const ledger = readJSON(ledgerPath, { version: 1, lifetime: { total_sessions: 0 } }) as {
     version: number;
-    lifetime: { total_sessions: number };
+    lifetime: { total_sessions: number; last_session_id?: string };
     [key: string]: unknown;
   };
-  ledger.lifetime.total_sessions++;
-  writeJSON(ledgerPath, ledger);
+  let payloadSessionId: string | undefined;
+  if (!process.stdin.isTTY) {
+    try {
+      payloadSessionId = (JSON.parse(await readStdin()) as { session_id?: string }).session_id;
+    } catch {}
+  }
+  if (typeof payloadSessionId !== "string" || payloadSessionId !== ledger.lifetime.last_session_id) {
+    ledger.lifetime.total_sessions++;
+    ledger.lifetime.last_session_id = payloadSessionId;
+    writeJSON(ledgerPath, ledger);
+  }
 
   process.exit(0);
 }

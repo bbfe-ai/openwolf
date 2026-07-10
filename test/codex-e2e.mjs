@@ -145,8 +145,9 @@ function codexPostEnv(command) {
     tool_name: "apply_patch", tool_input: { command }, tool_use_id: "call_1",
   };
 }
-// Codex SessionStart envelope (session-start.js ignores stdin — writes _session.json
-// via ensureWolfDir/getWolfDir — but we still feed a codex-shaped envelope for fidelity).
+// Codex SessionStart envelope (session-start.js reads stdin for the OPT-37
+// total_sessions dedup — writes _session.json via ensureWolfDir/getWolfDir;
+// we feed a codex-shaped envelope for fidelity, session_id "s1" is counted once).
 function codexStartEnv() {
   return {
     session_id: "s1", turn_id: "t0", cwd: TESTDIR.replace(/\\/g, "/"),
