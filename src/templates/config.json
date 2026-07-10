@@ -51,7 +51,8 @@
     },
     "buglog": {
       "auto_detect": false,
-      "max_entries": 200
+      "max_entries": 200,
+      "dedup_window_ms": 1800000
     },
     "ledger": {
       "max_sessions": 200

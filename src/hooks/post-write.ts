@@ -311,13 +311,17 @@ function autoDetectBugFix(wolfDir: string, absolutePath: string, projectRoot: st
   const detection = detectFixPattern(oldStr, newStr, ext, basename);
   if (!detection) return;
 
-  // Check for recent duplicate (same file + same category within 5 min)
+  // Check for recent duplicate (same file + same category within the dedup window).
+  // OPT-3: window is configurable via buglog.dedup_window_ms (default 30 min — the
+  // old 5 min was too short, logging the same recurring fix as new bug entries).
+  const buglogCfg = readConfig().buglog ?? {};
+  const dedupWindowMs = typeof buglogCfg.dedup_window_ms === "number" ? buglogCfg.dedup_window_ms : 30 * 60 * 1000;
   const recentDupe = bugLog.bugs.find(b => {
     if (path.basename(b.file) !== basename) return false;
     if (!b.tags.includes("auto-detected")) return false;
     if (!b.tags.includes(detection.category)) return false;
     const bugTime = new Date(b.last_seen).getTime();
-    return (Date.now() - bugTime) < 5 * 60 * 1000;
+    return (Date.now() - bugTime) < dedupWindowMs;
   });
 
   if (recentDupe) {
