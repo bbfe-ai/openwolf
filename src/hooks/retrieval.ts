@@ -43,12 +43,28 @@ function cap(s: string, n: number): string {
   return t.length <= n ? t : t.slice(0, n - 1) + "…";
 }
 
+// English stopwords filtered from ASCII tokens so high-frequency filler words
+// (the/a/is/of/...) don't bloat the index or dominate search (OPT-15). Applied
+// identically at index and query time (tokenize is shared), so index/query
+// tokenization stays consistent (cf. OPT-25). CJK tokens are never filtered —
+// Chinese has no equivalent stopword list and filtering CJK chars would harm
+// recall.
+const STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "if", "else", "then", "of", "in", "on",
+  "at", "to", "for", "with", "by", "as", "is", "are", "was", "were", "be", "been",
+  "being", "am", "do", "does", "did", "has", "have", "had", "will", "would",
+  "can", "could", "should", "shall", "may", "might", "this", "that", "these",
+  "those", "it", "its", "from", "into", "not", "no", "so", "than", "too", "very",
+]);
+
 // Tokenizer: ASCII word runs + single CJK chars + CJK bigrams (cheap CJK recall
 // without a segmenter). Used identically at index and query time.
 export function tokenize(text: string): string[] {
   const out: string[] = [];
   const lower = text.toLowerCase();
-  for (const m of lower.matchAll(/[a-z0-9_]{2,}/g)) out.push(m[0]);
+  for (const m of lower.matchAll(/[a-z0-9_]{2,}/g)) {
+    if (!STOPWORDS.has(m[0])) out.push(m[0]);
+  }
   for (const run of lower.match(/[一-鿿]+/g) ?? []) {
     for (let i = 0; i < run.length; i++) {
       out.push(run[i]);
@@ -105,8 +121,40 @@ function collectBuglog(items: BuildItem[], filePath: string): void {
   });
 }
 
-/** Rebuild the .wolf/index from memory.md, cerebrum.md and buglog.json. */
-export function buildIndex(wolfDir: string): void {
+// Newest mtime of the three indexed source files; Infinity if any is missing
+// (a missing source forces a rebuild so its absence is reflected).
+function newestSourceMtime(wolfDir: string): number {
+  let newest = 0;
+  for (const f of ["memory.md", "cerebrum.md", "buglog.json"]) {
+    try {
+      const m = fs.statSync(path.join(wolfDir, f)).mtimeMs;
+      if (m > newest) newest = m;
+    } catch {
+      return Infinity;
+    }
+  }
+  return newest;
+}
+
+/** Rebuild the .wolf/index from memory.md, cerebrum.md and buglog.json.
+ *  Skips the rebuild (returns false) when the index is fresh — it exists AND
+ *  was built at or after the newest source mtime — so the Stop hook doesn't
+ *  redo O(n) I/O every session when nothing changed (OPT-16). Returns true if
+ *  it rebuilt, false if it skipped. */
+export function buildIndex(wolfDir: string): boolean {
+  const idxPath = indexPath(wolfDir);
+  try {
+    const existing = readJSON<WolfIndex>(idxPath, { version: 0, built_at: "", records: [], postings: {} });
+    if (existing.built_at) {
+      const builtMs = Date.parse(existing.built_at);
+      if (Number.isFinite(builtMs) && builtMs >= newestSourceMtime(wolfDir)) {
+        return false; // fresh — skip rebuild
+      }
+    }
+  } catch {
+    // no/invalid index → fall through and build
+  }
+
   const items: BuildItem[] = [];
   collectLineFile(items, path.join(wolfDir, "memory.md"), "memory");
   collectLineFile(items, path.join(wolfDir, "cerebrum.md"), "cerebrum");
@@ -126,7 +174,8 @@ export function buildIndex(wolfDir: string): void {
     records,
     postings,
   };
-  writeJSON(indexPath(wolfDir), idx);
+  writeJSON(idxPath, idx);
+  return true;
 }
 
 export interface SearchHit extends WolfRecord {
