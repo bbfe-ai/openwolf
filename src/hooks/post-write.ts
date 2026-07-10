@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
 import {
   getWolfDir, ensureWolfDir, readJSON, writeJSON, readMarkdown, parseAnatomy, serializeAnatomy,
   extractDescription, estimateTokens, appendMarkdown, timeShort, readNormalizedStdin, normalizePath, readConfig
@@ -30,6 +31,10 @@ interface BugLog {
   version: number;
   bugs: BugEntry[];
 }
+
+// File extensions classified as "code" for edit-type/token estimation (OPT-35:
+// was duplicated as two identical Sets in updateAnatomyEntry + summarizeEdit).
+const CODE_EXTS = new Set([".ts", ".js", ".tsx", ".jsx", ".py", ".json", ".yaml", ".yml", ".css"]);
 
 async function main(): Promise<void> {
   ensureWolfDir();
@@ -94,9 +99,8 @@ function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: stri
 
     const desc = extractDescription(absolutePath).slice(0, 100);
     const ext = path.extname(absolutePath).toLowerCase();
-    const codeExts = new Set([".ts", ".js", ".tsx", ".jsx", ".py", ".json", ".yaml", ".yml", ".css"]);
     const proseExts = new Set([".md", ".txt", ".rst"]);
-    const type = codeExts.has(ext) ? "code" : proseExts.has(ext) ? "prose" : "mixed";
+    const type = CODE_EXTS.has(ext) ? "code" : proseExts.has(ext) ? "prose" : "mixed";
     const tokens = estimateTokens(fileContent, type as "code" | "prose" | "mixed");
 
     if (!sections.has(sectionKey)) sections.set(sectionKey, []);
@@ -135,8 +139,7 @@ function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: stri
     const relFile = normalizePath(path.relative(projectRoot, absolutePath));
     const fileContent = input.tool_input?.content ?? "";
     const ext = path.extname(absolutePath).toLowerCase();
-    const codeExts = new Set([".ts", ".js", ".tsx", ".jsx", ".py", ".json", ".yaml", ".yml", ".css"]);
-    const type = codeExts.has(ext) ? "code" : "mixed";
+    const type = CODE_EXTS.has(ext) ? "code" : "mixed";
     const writeTokens = estimateTokens(fileContent || newStr, type as "code" | "prose" | "mixed");
 
     let changeDesc = "";
@@ -298,7 +301,7 @@ function autoDetectBugFix(wolfDir: string, absolutePath: string, projectRoot: st
   const ext = path.extname(basename).toLowerCase();
 
   // Detect what kind of fix this is
-  const detection = detectFixPattern(oldStr, newStr, ext);
+  const detection = detectFixPattern(oldStr, newStr, ext, basename);
   if (!detection) return;
 
   // Check for recent duplicate (same file + same category within 5 min)
@@ -347,7 +350,7 @@ interface FixDetection {
   context?: string;
 }
 
-function detectFixPattern(oldStr: string, newStr: string, ext: string): FixDetection | null {
+export function detectFixPattern(oldStr: string, newStr: string, ext: string, filename: string): FixDetection | null {
   const oldLines = oldStr.split("\n");
   const newLines = newStr.split("\n");
 
@@ -369,7 +372,7 @@ function detectFixPattern(oldStr: string, newStr: string, ext: string): FixDetec
       (/!==?\s*(null|undefined)/.test(newStr) && !/!==?\s*(null|undefined)/.test(oldStr))) {
     return {
       category: "null-safety",
-      summary: `Null/undefined access in ${path.basename(path.basename(""))}`,
+      summary: `Null/undefined access in ${filename}`,
       rootCause: "Property access on potentially null/undefined value",
       fix: `Added null safety (optional chaining or null check)`,
       context: extractChangedLines(oldStr, newStr),
@@ -533,7 +536,7 @@ function detectFixPattern(oldStr: string, newStr: string, ext: string): FixDetec
     if (removedLines.length >= 2) {
       return {
         category: "refactor",
-        summary: `Significant refactor of ${path.basename("")}`,
+        summary: `Significant refactor of ${filename}`,
         rootCause: `${removedLines.length} lines replaced/restructured`,
         fix: `Rewrote ${oldLines.length}→${newLines.length} lines (${removedLines.length} removed)`,
         context: removedLines.slice(0, 2).map(l => l.trim().slice(0, 50)).join("; "),
@@ -578,4 +581,10 @@ function extractCSSProps(code: string): Map<string, string> {
   return props;
 }
 
-main().catch(() => process.exit(0));
+// Run only when invoked as a script (node post-write.js), not when imported
+// (e.g. unit tests importing detectFixPattern) — keeps post-write.ts
+// import-safe like retrieval.ts/prune.ts. argv[1] resolved to an absolute path
+// so relative invocations (node dist/hooks/post-write.js) match too.
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch(() => process.exit(0));
+}
