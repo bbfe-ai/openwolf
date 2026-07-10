@@ -31,13 +31,13 @@
 
 | Phase | 任务 | 状态 | 备注 |
 |-------|------|------|------|
-| P0 门禁 | T0.1 G-regress-claude fixture 脚本化(复用主线10 A/B) | ☐ | 把 .ab-test driver 固化为可复跑脚本 |
-| P0 门禁 | T0.2 基线快照:Claude 路径 memory/buglog/search 基线值 | ☐ | G-regress-claude 的零 diff 基线 |
-| P1 接缝 | T1.1 detectAgent() + normalize 接缝空壳(claude 直通) | ☐ | 纯增量零行为变更 |
-| P1 接缝 | T1.2 adapters 目录 +  tsconfig 验证 | ☐ | G0-hooks-single |
-| P2 codex | T2.1 V4A patch 解析器 `adapters/codex-v4a.ts` | ☐ | D5 自写 |
-| P2 codex | T2.2 Codex envelope 归一化(apply_patch→Claude 形状) | ☐ | 依赖 T2.1 |
-| P2 codex | T2.3 `openwolf init --agent codex` 写 .codex/hooks.json | ☐ | D4 单选 |
+| P0 门禁 | T0.1 G-regress-claude fixture 脚本化(复用主线10 A/B) | ☑ | commit dfaf5e0;8/8 green |
+| P0 门禁 | T0.2 基线快照:Claude 路径 memory/buglog/search 基线值 | ☑ | test/baselines/claude.json;零 drift |
+| P1 接缝 | T1.1 detectAgent() + normalize 接缝空壳(claude 直通) | ☑ | commit 1f5e870;claude passthrough noop |
+| P1 接缝 | T1.2 adapters 目录 +  tsconfig 验证 | ☑ | dist/hooks/adapters/normalize.js;init 部署子目录 |
+| P2 codex | T2.1 V4A patch 解析器 `adapters/codex-v4a.ts` | ☑ | commit ac47a2f;7/7 byte-parity |
+| P2 codex | T2.2 Codex envelope 归一化(apply_patch→Claude 形状) | ☑ | commit 7db1f04;10/10;envelope snake_case 亲验 |
+| P2 codex | T2.3 `openwolf init --agent codex` 写 .codex/hooks.json | ☑ | commit b6a7f0b;codex-init-test 43/43 + G-regress-claude 8/8 |
 | P2 codex | T2.4 项目根 cwd 适配(替代 $CLAUDE_PROJECT_DIR) | ☐ | envelope.cwd |
 | P2 codex | T2.5 G-codex-e2e 实跑验证 | ☐ | |
 | P3 opencode | T3.1 TS plugin shim `adapters/opencode-plugin.ts` | ☐ | D2 shim 非 SSE |
@@ -58,7 +58,7 @@
 | stop prune 无 daemon | ✅ ☑ | — | — |
 | search 定位非整读 | ✅ ☑ | — | — |
 
-**下一个可执行任务:T0.1**(把 A/B driver 固化为 G-regress-claude 可复跑脚本)。
+**下一个可执行任务:T2.4**(项目根 cwd 适配:`shared.ts` getWolfDir 加 codex 分支,无 `$CLAUDE_PROJECT_DIR` 时用 envelope.cwd)。
 
 ## 3. Phase 总览(不带状态列,状态以 §2 为准)
 
