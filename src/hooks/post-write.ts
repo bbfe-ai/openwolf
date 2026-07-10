@@ -3,8 +3,9 @@ import * as path from "node:path";
 import * as crypto from "node:crypto";
 import {
   getWolfDir, ensureWolfDir, readJSON, writeJSON, readMarkdown, parseAnatomy, serializeAnatomy,
-  extractDescription, estimateTokens, appendMarkdown, timeShort, readStdin, normalizePath, readConfig
+  extractDescription, estimateTokens, appendMarkdown, timeShort, readNormalizedStdin, normalizePath, readConfig
 } from "./shared.js";
+import type { ClaudeShapedEvent } from "./shared.js";
 
 interface SessionData {
   files_written: Array<{ file: string; action: string; tokens: number; at: string }>;
@@ -37,28 +38,33 @@ async function main(): Promise<void> {
   const sessionFile = path.join(hooksDir, "_session.json");
   const projectRoot = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
-  const raw = await readStdin();
-  let input: { tool_name?: string; tool_input?: { file_path?: string; path?: string; content?: string; old_string?: string; new_string?: string } };
-  try {
-    input = JSON.parse(raw);
-  } catch {
-    process.exit(0);
-    return;
+  // Agent adapter seam (initiative 11): read stdin once, detect the agent, and
+  // normalize into zero-or-more Claude-shaped events. Claude → 1 passthrough
+  // event (processOne runs once, behavior unchanged); codex apply_patch → one
+  // Edit event per V4A file change (each runs the full post-write body). The
+  // ~130-line body is extracted into processOne so it stays byte-identical rather
+  // than being re-indented into a for-block.
+  const { events } = await readNormalizedStdin();
+  for (const input of events) {
+    processOne(input, wolfDir, sessionFile, projectRoot);
   }
+  process.exit(0);
+}
 
+function processOne(input: ClaudeShapedEvent, wolfDir: string, sessionFile: string, projectRoot: string): void {
   const toolName = input.tool_name ?? "Write";
-  const filePath = input.tool_input?.file_path ?? input.tool_input?.path ?? "";
-  if (!filePath) { process.exit(0); return; }
+  const filePath = (input.tool_input?.file_path ?? input.tool_input?.path ?? "") as string;
+  if (!filePath) { return; }
 
   const absolutePath = path.isAbsolute(filePath) ? filePath : path.join(projectRoot, filePath);
 
   // Skip processing for .wolf/ internal files to avoid slow self-referential updates
   const relPath = normalizePath(path.relative(projectRoot, absolutePath));
-  if (relPath.startsWith(".wolf/")) { process.exit(0); return; }
+  if (relPath.startsWith(".wolf/")) { return; }
 
   // Never track .env files in anatomy — they contain secrets
   const baseName = path.basename(absolutePath);
-  if (baseName === ".env" || baseName.startsWith(".env.")) { process.exit(0); return; }
+  if (baseName === ".env" || baseName.startsWith(".env.")) { return; }
 
   const oldStr = input.tool_input?.old_string ?? "";
   const newStr = input.tool_input?.new_string ?? "";
@@ -180,8 +186,6 @@ async function main(): Promise<void> {
       autoDetectBugFix(wolfDir, absolutePath, projectRoot, oldStr, newStr);
     }
   } catch {}
-
-  process.exit(0);
 }
 
 // ─── Edit Summarizer ─────────────────────────────────────────────

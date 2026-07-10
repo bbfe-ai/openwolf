@@ -2,10 +2,13 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
-// Agent adapter seam (initiative 11) — re-exported so hooks can detect/normalize
-// cross-agent events without each hook repeating the import path.
-export { detectAgent, normalizeToolEvent } from "./adapters/normalize.js";
-export type { AgentKind, ClaudeShapedEvent } from "./adapters/normalize.js";
+// Agent adapter seam (initiative 11) — imported here so readNormalizedStdin() can
+// detect+normalize cross-agent events in one place, and re-exported so hooks can
+// use them directly without repeating the import path.
+import { detectAgent, normalizeToolEvent } from "./adapters/normalize.js";
+import type { AgentKind, ClaudeShapedEvent } from "./adapters/normalize.js";
+export { detectAgent, normalizeToolEvent };
+export type { AgentKind, ClaudeShapedEvent };
 
 export function getWolfDir(): string {
   // Prefer CLAUDE_PROJECT_DIR so hooks work even if CWD changes during a session
@@ -22,6 +25,35 @@ export function ensureWolfDir(): void {
   if (!fs.existsSync(wolfDir)) {
     process.exit(0);
   }
+}
+
+export interface NormalizedInput {
+  agent: AgentKind;
+  /** Zero-or-more Claude-shaped events. claude → 1 (passthrough); codex apply_patch
+   * → N (one per V4A change); opencode → [] (T3.x). Hooks loop and no-op on empty. */
+  events: ClaudeShapedEvent[];
+}
+
+/**
+ * Read hook stdin ONCE, detect the agent, and normalize into zero-or-more
+ * Claude-shaped events. This is the single chokepoint where the agent adapter
+ * seam (initiative 11) meets the hook core: hooks call this instead of
+ * readStdin()+JSON.parse, then loop `events` running the existing Claude-shaped
+ * body. Claude path → 1 event → loop runs once → behavior identical (C1 safe).
+ * Reading stdin once here means each hook need not re-implement detect/normalize
+ * and must not call readStdin() itself (stdin is consumed exactly once).
+ */
+export async function readNormalizedStdin(): Promise<NormalizedInput> {
+  const raw = await readStdin();
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { agent: "claude", events: [] };
+  }
+  const agent = detectAgent(parsed);
+  const events = normalizeToolEvent(agent, parsed);
+  return { agent, events };
 }
 
 export function readJSON<T = unknown>(filePath: string, fallback: T): T {

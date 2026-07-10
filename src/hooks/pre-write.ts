@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getWolfDir, ensureWolfDir, readJSON, readMarkdown, readStdin } from "./shared.js";
+import { getWolfDir, ensureWolfDir, readJSON, readMarkdown, readNormalizedStdin } from "./shared.js";
 
 interface BugEntry {
   id: string;
@@ -20,32 +20,31 @@ async function main(): Promise<void> {
   ensureWolfDir();
   const wolfDir = getWolfDir();
 
-  const raw = await readStdin();
-  let input: { tool_input?: { content?: string; old_string?: string; new_string?: string; file_path?: string; path?: string } };
-  try {
-    input = JSON.parse(raw);
-  } catch {
-    process.exit(0);
-    return;
-  }
+  // Agent adapter seam (initiative 11): read stdin once, detect the agent, and
+  // normalize into zero-or-more Claude-shaped events. Claude → 1 passthrough
+  // event (loop runs once, behavior unchanged); codex apply_patch → one Edit
+  // event per V4A file change. Empty events → loop no-ops → clean exit.
+  const { events } = await readNormalizedStdin();
 
-  // For Edit tool, the meaningful content is old_string + new_string
-  const content = input.tool_input?.content ?? "";
-  const oldStr = input.tool_input?.old_string ?? "";
-  const newStr = input.tool_input?.new_string ?? "";
-  const filePath = input.tool_input?.file_path ?? input.tool_input?.path ?? "";
-  const allContent = [content, oldStr, newStr].join("\n");
+  for (const input of events) {
+    // For Edit tool, the meaningful content is old_string + new_string
+    const content = input.tool_input?.content ?? "";
+    const oldStr = input.tool_input?.old_string ?? "";
+    const newStr = input.tool_input?.new_string ?? "";
+    const filePath = (input.tool_input?.file_path ?? input.tool_input?.path ?? "") as string;
+    const allContent = [content, oldStr, newStr].join("\n");
 
-  if (!allContent.trim()) { process.exit(0); return; }
+    if (!allContent.trim()) continue;
 
-  // 1. Cerebrum Do-Not-Repeat check
-  checkCerebrum(wolfDir, allContent);
+    // 1. Cerebrum Do-Not-Repeat check
+    checkCerebrum(wolfDir, allContent);
 
-  // 2. Bug log: search for similar past bugs when editing code
-  // This fires when Claude is about to edit a file — if the edit looks like a fix
-  // (changing error handling, modifying catch blocks, etc.), check the bug log
-  if (filePath && (oldStr || content)) {
-    checkBugLog(wolfDir, filePath, oldStr, newStr, content);
+    // 2. Bug log: search for similar past bugs when editing code
+    // This fires when Claude is about to edit a file — if the edit looks like a fix
+    // (changing error handling, modifying catch blocks, etc.), check the bug log
+    if (filePath && (oldStr || content)) {
+      checkBugLog(wolfDir, filePath, oldStr, newStr, content);
+    }
   }
 
   process.exit(0);
