@@ -97,6 +97,16 @@ function setup() {
       if (f.endsWith(".js")) fs.copyFileSync(path.join(adaptSrc, f), path.join(adaptDst, f));
     }
   }
+  // Deploy the descriptions subdirectory too — shared.js imports ./descriptions/known.js
+  // (OPT-33). readdirSync so per-family modules added later are picked up automatically.
+  const descSrc = path.join(HOOKS, "descriptions");
+  const descDst = path.join(TESTDIR, ".wolf", "hooks", "descriptions");
+  if (fs.existsSync(descSrc)) {
+    fs.mkdirSync(descDst, { recursive: true });
+    for (const f of fs.readdirSync(descSrc)) {
+      if (f.endsWith(".js")) fs.copyFileSync(path.join(descSrc, f), path.join(descDst, f));
+    }
+  }
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "config.json"), JSON.stringify(CONFIG));
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "anatomy.md"), "# anatomy.md\n\n> Auto-maintained.\n## BuildKit\n- \`src/app.ts\` — main app (~50 tok)\n");
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "cerebrum.md"),

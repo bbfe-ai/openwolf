@@ -41,6 +41,15 @@ function deployHooks() {
       if (f.endsWith(".js")) fs.copyFileSync(path.join(adaptSrc, f), path.join(adaptDest, f));
     }
   }
+  // Deploy the descriptions subdirectory — shared.js imports ./descriptions/known.js (OPT-33).
+  const descSrc = path.join(HOOKS_SRC, "descriptions");
+  if (fs.existsSync(descSrc)) {
+    const descDest = path.join(dest, "descriptions");
+    fs.mkdirSync(descDest, { recursive: true });
+    for (const f of fs.readdirSync(descSrc)) {
+      if (f.endsWith(".js")) fs.copyFileSync(path.join(descSrc, f), path.join(descDest, f));
+    }
+  }
 }
 
 function setup(openwolfOverrides) {

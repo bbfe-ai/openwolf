@@ -48,6 +48,11 @@ function deployWolf(target) {
   for (const f of ["normalize.js", "codex-v4a.js"]) {
     fs.copyFileSync(path.join(DIST_HOOKS, "adapters", f), path.join(target, ".wolf", "hooks", "adapters", f));
   }
+  // Deploy the descriptions subdirectory — shared.js imports ./descriptions/known.js (OPT-33).
+  fs.mkdirSync(path.join(target, ".wolf", "hooks", "descriptions"), { recursive: true });
+  for (const f of fs.readdirSync(path.join(DIST_HOOKS, "descriptions"))) {
+    if (f.endsWith(".js")) fs.copyFileSync(path.join(DIST_HOOKS, "descriptions", f), path.join(target, ".wolf", "hooks", "descriptions", f));
+  }
   fs.writeFileSync(path.join(target, ".wolf", "hooks", "package.json"), JSON.stringify({ type: "module" }));
   fs.writeFileSync(path.join(target, ".wolf", "token-ledger.json"),
     JSON.stringify({ version: 1, lifetime: { total_sessions: 0 } }, null, 2));

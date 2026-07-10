@@ -53,6 +53,14 @@ function setup(sabotageMemory) {
       if (f.endsWith(".js")) fs.copyFileSync(path.join(adaptSrc, f), path.join(TESTDIR, ".wolf", "hooks", "adapters", f));
     }
   }
+  // Deploy the descriptions subdirectory — shared.js imports ./descriptions/known.js (OPT-33).
+  const descSrc = path.join(HOOKS, "descriptions");
+  if (fs.existsSync(descSrc)) {
+    fs.mkdirSync(path.join(TESTDIR, ".wolf", "hooks", "descriptions"), { recursive: true });
+    for (const f of fs.readdirSync(descSrc)) {
+      if (f.endsWith(".js")) fs.copyFileSync(path.join(descSrc, f), path.join(TESTDIR, ".wolf", "hooks", "descriptions", f));
+    }
+  }
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "config.json"), JSON.stringify(CONFIG));
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "anatomy.md"), "# anatomy.md\n\n> Auto-maintained.\n## src/\n- `app.ts` — pre (~10 tok)\n");
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "buglog.json"), JSON.stringify({ version: 1, bugs: [] }));

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
+import { KNOWN_DESCRIPTIONS } from "./descriptions/known.js";
 
 // Agent adapter seam (initiative 11) — imported here so readNormalizedStdin() can
 // detect+normalize cross-agent events in one place, and re-exported so hooks can
@@ -163,22 +164,7 @@ export function extractDescription(filePath: string): string {
   const MAX_DESC = 150;
   const basename = path.basename(filePath);
   const ext = path.extname(basename).toLowerCase();
-  const known: Record<string, string> = {
-    "package.json": "Node.js package manifest",
-    "tsconfig.json": "TypeScript configuration",
-    ".gitignore": "Git ignore rules",
-    "README.md": "Project documentation",
-    "composer.json": "PHP package manifest",
-    "requirements.txt": "Python dependencies",
-    "schema.sql": "Database schema",
-    "Dockerfile": "Docker container definition",
-    "docker-compose.yml": "Docker Compose services",
-    "Cargo.toml": "Rust package manifest",
-    "go.mod": "Go module definition",
-    "Gemfile": "Ruby dependencies",
-    "pubspec.yaml": "Dart/Flutter package manifest",
-  };
-  if (known[basename]) return known[basename];
+  if (KNOWN_DESCRIPTIONS[basename]) return KNOWN_DESCRIPTIONS[basename];
 
   let content: string;
   try {

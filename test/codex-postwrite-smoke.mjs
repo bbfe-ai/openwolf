@@ -55,6 +55,15 @@ function setup() {
       if (f.endsWith(".js")) fs.copyFileSync(path.join(adaptSrc, f), path.join(adaptDst, f));
     }
   }
+  // Deploy the descriptions subdirectory — shared.js imports ./descriptions/known.js (OPT-33).
+  const descSrc = path.join(HOOKS, "descriptions");
+  const descDst = path.join(TESTDIR, ".wolf", "hooks", "descriptions");
+  if (fs.existsSync(descSrc)) {
+    fs.mkdirSync(descDst, { recursive: true });
+    for (const f of fs.readdirSync(descSrc)) {
+      if (f.endsWith(".js")) fs.copyFileSync(path.join(descSrc, f), path.join(descDst, f));
+    }
+  }
   fs.writeFileSync(path.join(TESTDIR, ".wolf", "config.json"), JSON.stringify(CONFIG));
   // anatomy starts WITHOUT app.ts/util.ts — the hook must ADD them (state delta
   // is the proof the body ran; pre-wiring it would not).
