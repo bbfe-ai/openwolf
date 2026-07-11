@@ -22,6 +22,7 @@ import { HOOK_FILES } from "../dist/src/cli/hook-files.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 
 let pass = 0;
 let fail = 0;
@@ -45,6 +46,7 @@ const HISTORICALLY_MISSING = [
 ];
 
 const tempWolf = fs.mkdtempSync(path.join(os.tmpdir(), "openwolf-update-deploy-"));
+await (async () => {
 try {
   copyHookScripts(tempWolf);
   const hooksDir = path.join(tempWolf, "hooks");
@@ -88,9 +90,32 @@ try {
   // 5. hooks/package.json with type:module (ESM hooks requirement).
   const pkg = JSON.parse(fs.readFileSync(path.join(hooksDir, "package.json"), "utf-8"));
   assert(pkg.type === "module", "hooks/package.json has type:module");
+
+  // 6. BEHAVIOURAL: the deployed shared.js must actually load — its relative
+  //    imports (./descriptions/known.js, ./adapters/normalize.js, ...) must
+  //    resolve against the ON-DISK deploy, not the source tree. This is the
+  //    anti-false-green check: the file-presence assertions above stayed green
+  //    even when HOOK_FILES forgot descriptions/*.js (OPT-33 P0 gap), because
+  //    they only checked the entries in the list, not whether shared.js could
+  //    import its own dependencies. Loading shared.js makes a missing submodule
+  //    throw ERR_MODULE_NOT_FOUND immediately. extractDescription is exported,
+  //    so a successful load + typeof check proves the whole import graph is
+  //    deployed.
+  const sharedUrl = pathToFileURL(path.join(hooksDir, "shared.js")).href;
+  let loaded = null;
+  try {
+    loaded = await import(sharedUrl);
+  } catch (e) {
+    assert(false, `deployed shared.js loads (import graph complete): ${e.code || e.message}`);
+  }
+  if (loaded) {
+    assert(typeof loaded.extractDescription === "function",
+      "deployed shared.js exports extractDescription (import graph complete)");
+  }
 } finally {
   fs.rmSync(tempWolf, { recursive: true, force: true });
 }
+})();
 
 console.log(`\nG-update-deploy: ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

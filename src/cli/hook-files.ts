@@ -24,4 +24,19 @@ export const HOOK_FILES: readonly string[] = [
   // so the adapter subdirectory must be deployed alongside the top-level hooks.
   "adapters/normalize.js",
   "adapters/codex-v4a.js",
+  // Description extractor submodules (OPT-33): shared.js's extractDescription
+  // imports ./descriptions/known.js (and the other 8 submodules it re-exports).
+  // Forgetting these here means `openwolf init`/`update` deploys a shared.js
+  // whose first `import "./descriptions/known.js"` throws ERR_MODULE_NOT_FOUND
+  // → extractDescription silently dies. This is exactly the gap that bit the
+  // test harness (descriptions/ copy block had to be hand-patched into 8 tests).
+  "descriptions/known.js",
+  "descriptions/cap.js",
+  "descriptions/data.js",
+  "descriptions/web.js",
+  "descriptions/systems.js",
+  "descriptions/php.js",
+  "descriptions/tsjs.js",
+  "descriptions/docs.js",
+  "descriptions/fallback.js",
 ];
